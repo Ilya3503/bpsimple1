@@ -1,58 +1,74 @@
-from fastapi import FastAPI, Query
-from app.camera import RealSenseCamera
+# main.py
+from fastapi import FastAPI
+from threading import Lock
+import pyrealsense2 as rs
+import numpy as np
+import open3d as o3d
 from app.processing import voxel_downsample, remove_outliers, remove_plane, cluster_dbscan
 from app.utils import save_pcd
-import open3d as o3d
 
 app = FastAPI(title="Jetson RealSense PointCloud Pipeline")
 
-camera = RealSenseCamera()
+camera = None
+camera_lock = Lock()
+
+class RealSenseCamera:
+    def __init__(self, width=640, height=480, fps=30):
+        self.pipeline = rs.pipeline()
+        config = rs.config()
+        config.enable_stream(rs.stream.depth, width, height, rs.format.z16, fps)
+        config.enable_stream(rs.stream.color, width, height, rs.format.bgr8, fps)
+        self.pipeline.start(config)
+
+    def stop(self):
+        self.pipeline.stop()
+
+    def get_frame(self):
+        frames = self.pipeline.wait_for_frames()
+        depth = frames.get_depth_frame()
+        color = frames.get_color_frame()
+        if not depth or not color:
+            return None, None, None
+        depth_image = np.asanyarray(depth.get_data())
+        color_image = np.asanyarray(color.get_data())
+        return color_image, depth_image, depth
+
+    def get_pointcloud(self):
+        color, depth_image, depth_frame = self.get_frame()
+        if color is None:
+            return None, None
+        pc = rs.pointcloud()
+        points = pc.calculate(depth_frame)
+        v = np.asanyarray(points.get_vertices()).view(np.float32).reshape(-1, 3)
+        return v, color
+
+# создаём камеру при старте
+@app.on_event("startup")
+def startup_event():
+    global camera
+    camera = RealSenseCamera()
+
+# останавливаем камеру при shutdown
+@app.on_event("shutdown")
+def shutdown_event():
+    global camera
+    if camera:
+        camera.stop()
 
 @app.get("/process")
-def process_pointcloud(
-    voxel_size: float = Query(0.01, description="Voxel size for downsampling"),
-    nb_neighbors: int = Query(20, description="Number of neighbors for outlier removal"),
-    std_ratio: float = Query(2.0, description="Std ratio for outlier removal"),
-    distance_threshold: float = Query(0.01, description="Distance threshold for plane removal"),
-    ransac_n: int = Query(3, description="RANSAC points"),
-    num_iterations: int = Query(1000, description="RANSAC iterations"),
-    dbscan_eps: float = Query(0.02, description="EPS for DBSCAN"),
-    dbscan_min_samples: int = Query(10, description="Min samples for DBSCAN"),
-    save_intermediate: bool = Query(True, description="Save intermediate .ply files")
-):
-    """
-    Захват pointcloud с RealSense и обработка пайплайном:
-    вокселизация -> удаление шумов -> RANSAC -> DBSCAN.
-    Возвращает количество кластеров и список файлов .ply.
-    """
-    ply_files = []
+def process_pointcloud():
+    global camera
+    with camera_lock:
+        points, color = camera.get_pointcloud()
+    if points is None:
+        return {"error": "Failed to capture pointcloud"}
 
-    # 1. Захват pointcloud
-    points, _ = camera.get_pointcloud()
+    # создаём Open3D pointcloud
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(points)
-    if save_intermediate: ply_files.append(save_pcd(pcd, "raw"))
 
-    # 2. Вокселизация
-    pcd = voxel_downsample(pcd, voxel_size=voxel_size, save=save_intermediate)
-    if save_intermediate: ply_files.append(save_pcd(pcd, "voxel"))
+    # пример обработки (можно добавить весь ваш pipeline)
+    pcd = voxel_downsample(pcd, voxel_size=0.01)
+    ply_file = save_pcd(pcd, "processed")
 
-    # 3. Удаление шумов
-    pcd = remove_outliers(pcd, nb_neighbors=nb_neighbors, std_ratio=std_ratio, save=save_intermediate)
-    if save_intermediate: ply_files.append(save_pcd(pcd, "outliers"))
-
-    # 4. Удаление опорной плоскости
-    pcd = remove_plane(pcd, distance_threshold=distance_threshold, ransac_n=ransac_n,
-                       num_iterations=num_iterations, save=save_intermediate)
-    if save_intermediate: ply_files.append(save_pcd(pcd, "plane_removed"))
-
-    # 5. Кластеризация DBSCAN
-    labels = cluster_dbscan(pcd, eps=dbscan_eps, min_samples=dbscan_min_samples, save=save_intermediate)
-    if save_intermediate: ply_files.append(save_pcd(pcd, "dbscan"))
-
-    clusters_count = len(set(labels)) - (1 if -1 in labels else 0)
-
-    return {
-        "clusters_count": clusters_count,
-        "ply_files": ply_files
-    }
+    return {"ply_file": ply_file}
