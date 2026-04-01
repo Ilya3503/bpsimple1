@@ -4,6 +4,8 @@ from threading import Lock
 import pyrealsense2 as rs
 import numpy as np
 import open3d as o3d
+from datetime import datetime
+import os
 from app.processing import voxel_downsample, remove_outliers, remove_plane, cluster_dbscan
 from app.utils import save_pcd
 
@@ -11,6 +13,8 @@ app = FastAPI(title="Jetson RealSense PointCloud Pipeline")
 
 camera = None
 camera_lock = Lock()
+DATA_DIR = "data"
+os.makedirs(DATA_DIR, exist_ok=True)
 
 class RealSenseCamera:
     def __init__(self, width=640, height=480, fps=30):
@@ -55,8 +59,9 @@ def shutdown_event():
     if camera:
         camera.stop()
 
-@app.get("/process")
-def process_pointcloud():
+# Эндпоинт для захвата pointcloud и сохранения в файл
+@app.get("/capture")
+def capture_pointcloud():
     global camera
     with camera_lock:
         points, color = camera.get_pointcloud()
@@ -67,8 +72,45 @@ def process_pointcloud():
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(points)
 
-    # пример обработки (можно добавить весь ваш pipeline)
-    pcd = voxel_downsample(pcd, voxel_size=0.01)
-    ply_file = save_pcd(pcd, "processed")
+    # сохраняем с таймстемпом
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = os.path.join(DATA_DIR, f"capture_{timestamp}.ply")
+    o3d.io.write_point_cloud(filename, pcd)
 
-    return {"ply_file": ply_file}
+    return {"ply_file": filename}
+
+# Эндпоинт для обработки последнего pointcloud
+@app.get("/process")
+def process_last_pointcloud(
+    voxel_size: float = 0.01,
+    nb_neighbors: int = 20,
+    std_ratio: float = 2.0,
+    distance_threshold: float = 0.01,
+    ransac_n: int = 3,
+    num_iterations: int = 1000,
+    dbscan_eps: float = 0.02,
+    dbscan_min_samples: int = 10
+):
+    # ищем последний файл по таймстемпу
+    ply_files = sorted([f for f in os.listdir(DATA_DIR) if f.endswith(".ply")])
+    if not ply_files:
+        return {"error": "No captured pointclouds found"}
+    latest_file = os.path.join(DATA_DIR, ply_files[-1])
+
+    # загружаем pointcloud
+    pcd = o3d.io.read_point_cloud(latest_file)
+
+    # пайплайн обработки
+    pcd = voxel_downsample(pcd, voxel_size=voxel_size)
+    pcd = remove_outliers(pcd, nb_neighbors=nb_neighbors, std_ratio=std_ratio)
+    pcd = remove_plane(pcd, distance_threshold=distance_threshold, ransac_n=ransac_n, num_iterations=num_iterations)
+    labels = cluster_dbscan(pcd, eps=dbscan_eps, min_samples=dbscan_min_samples)
+
+    # сохраняем обработанный файл
+    processed_filename = save_pcd(pcd, prefix="processed")
+
+    clusters_count = len(set(labels)) - (1 if -1 in labels else 0)
+    return {
+        "clusters_count": clusters_count,
+        "processed_ply_file": processed_filename
+    }
