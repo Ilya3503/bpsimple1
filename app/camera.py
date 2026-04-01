@@ -17,13 +17,15 @@ class RealSenseCamera:
             return None, None
         depth_image = np.asanyarray(depth.get_data())
         color_image = np.asanyarray(color.get_data())
-        return color_image, depth_image
+        return color_image, depth_image, depth  # возвращаем depth frame для PointCloud
 
     def get_pointcloud(self):
-        color, depth = self.get_frame()
+        color, depth_image, depth_frame = self.get_frame()
         if color is None:
             return None, None
+
+        # создаём PointCloud из depth_frame
         pc = rs.pointcloud()
-        points = pc.calculate(rs.frame())
-        v = np.asanyarray(points.get_vertices()).view(np.float32).reshape(-1,3)
+        points = pc.calculate(depth_frame)  # передаём реальный depth_frame
+        v = np.asanyarray(points.get_vertices()).view(np.float32).reshape(-1, 3)
         return v, color
