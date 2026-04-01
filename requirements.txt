@@ -1,0 +1,8 @@
+numpy
+opencv-python
+open3d
+pyrealsense2
+scikit-learn
+fastapi
+uvicorn
+pydantic
