@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Query, HTTPException
 from app.camera import capture_pointcloud
 from app.processing import process_pointcloud
 
