@@ -202,7 +202,7 @@ def process_pointcloud(
     results_dir: str,
     use_latest: bool = True,
     folder: str = "data",
-    voxel_size: float = 8.0,
+    voxel_size: float = 0.0,
     nb_neighbors: int = 20,
     std_ratio: float = 2.0,
     distance_threshold: float = 70.0,
