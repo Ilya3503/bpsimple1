@@ -49,7 +49,7 @@ def capture_pointcloud(output_dir: str = "data"):
     color_frame = frames.get_color_frame()
 
     # --- применяем фильтры ---
-    depth_frame = decimation.process(depth_frame)
+
     depth_frame = spatial.process(depth_frame)
     depth_frame = temporal.process(depth_frame)
     depth_frame = hole_filling.process(depth_frame)
