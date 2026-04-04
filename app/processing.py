@@ -59,10 +59,19 @@ def remove_plane(pcd: o3d.geometry.PointCloud,
                  distance_threshold: float = 0.01,
                  ransac_n: int = 3,
                  num_iterations: int = 1000) -> o3d.geometry.PointCloud:
-    _, inliers = pcd.segment_plane(distance_threshold=distance_threshold,
-                                   ransac_n=ransac_n,
-                                   num_iterations=num_iterations)
-    return pcd.select_by_index(inliers, invert=True)
+    pts = np.asarray(pcd.points)
+    if pts.shape[0] < ransac_n:
+        # Недостаточно точек для сегментации плоскости
+        print(f"[remove_plane] Пропуск сегментации плоскости: точек {pts.shape[0]} < ransac_n {ransac_n}")
+        return pcd
+    try:
+        plane_model, inliers = pcd.segment_plane(distance_threshold=distance_threshold,
+                                                 ransac_n=ransac_n,
+                                                 num_iterations=num_iterations)
+        return pcd.select_by_index(inliers, invert=True)
+    except Exception as e:
+        print(f"[remove_plane] Ошибка сегментации плоскости: {e}")
+        return pcd
 
 
 def clean_point_cloud(pcd: o3d.geometry.PointCloud) -> o3d.geometry.PointCloud:
@@ -196,7 +205,7 @@ def process_pointcloud(
     voxel_size: float = 8.0,
     nb_neighbors: int = 20,
     std_ratio: float = 2.0,
-    #distance_threshold: float = 70.0,
+    distance_threshold: float = 70.0,
     ransac_n: int = 3,
     num_iterations: int = 1000,
     min_bound: tuple = (-231, -190, 474),
@@ -218,8 +227,7 @@ def process_pointcloud(
     pcd = load_point_cloud(input_file)
     pcd = voxel_downsample(pcd, voxel_size)
     pcd = remove_noise(pcd, nb_neighbors, std_ratio)
-    #pcd = remove_plane(pcd, distance_threshold, ransac_n, num_iterations)
-    pcd = remove_plane(pcd, ransac_n, num_iterations)
+    pcd = remove_plane(pcd, distance_threshold, ransac_n, num_iterations)
     pcd = crop_points_numpy(pcd, min_bound, max_bound)
 
     clusters = cluster_dbscan(pcd, eps, min_points, max_points)
