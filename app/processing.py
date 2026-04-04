@@ -208,8 +208,8 @@ def process_pointcloud(
     distance_threshold: float = 70.0,
     ransac_n: int = 3,
     num_iterations: int = 1000,
-    min_bound: tuple = (-231, -190, 474),
-    max_bound: tuple = (264, 190, 670),
+    min_bound: Optional[tuple],
+    max_bound: Optional[tuple],
     eps: float = 30,
     min_points: int = 20,
     max_points: Optional[int] = None,
@@ -224,13 +224,34 @@ def process_pointcloud(
     elif input_file is None:
         raise ValueError("No input file specified and use_latest=False")
 
+    print(f"[process] Загрузка облака точек: {input_file}")
     pcd = load_point_cloud(input_file)
-    pcd = voxel_downsample(pcd, voxel_size)
-    pcd = remove_noise(pcd, nb_neighbors, std_ratio)
-    pcd = remove_plane(pcd, distance_threshold, ransac_n, num_iterations)
-    pcd = crop_points_numpy(pcd, min_bound, max_bound)
+    print(f"[process] Исходное облако: {len(pcd.points)} точек")
 
-    clusters = cluster_dbscan(pcd, eps, min_points, max_points)
+    # Даунсэмплинг
+    pcd = voxel_downsample(pcd, voxel_size)
+    print(f"[process] После даунсэмплинга (voxel_size={voxel_size}): {len(pcd.points)} точек")
+
+    # Удаление шума
+    pcd = remove_noise(pcd, nb_neighbors, std_ratio)
+    print(f"[process] После фильтрации шума (nb_neighbors={nb_neighbors}, std_ratio={std_ratio}): {len(pcd.points)} точек")
+
+    # Удаление плоскости
+    pcd = remove_plane(pcd, distance_threshold, ransac_n, num_iterations)
+    print(f"[process] После удаления плоскости (distance_threshold={distance_threshold}): {len(pcd.points)} точек")
+
+    # Кроп
+    pcd = crop_points_numpy(pcd, min_bound, max_bound)
+    print(f"[process] После обрезки по границам {min_bound} - {max_bound}: {len(pcd.points)} точек")
+
+    # Проверка перед кластеризацией
+    if len(pcd.points) == 0:
+        print("[process] Внимание: после предобработки нет точек для кластеризации!")
+        clusters = []
+    else:
+        clusters = cluster_dbscan(pcd, eps, min_points, max_points)
+        print(f"[process] После DBSCAN (eps={eps}, min_points={min_points}): найдено {len(clusters)} кластеров")
+
     clusters_info = []
     for i, c in enumerate(clusters):
         info = get_obb_for_cluster(c)
