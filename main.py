@@ -54,7 +54,7 @@ def process_endpoint(
             voxel_size=voxel_size,
             nb_neighbors=nb_neighbors,
             std_ratio=std_ratio,
-            distance_threshold=distance_threshold,
+            #distance_threshold=distance_threshold,
             ransac_n=ransac_n,
             num_iterations=num_iterations,
             min_bound=min_bound,
