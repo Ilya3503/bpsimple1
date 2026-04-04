@@ -6,3 +6,5 @@ scikit-learn
 fastapi
 uvicorn
 pydantic
+matplotlib.pyplot
+matplotlib
