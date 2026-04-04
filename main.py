@@ -46,8 +46,6 @@ def process_endpoint(
             voxel_size=voxel_size,
             nb_neighbors=nb_neighbors,
             std_ratio=std_ratio,
-            min_bound=min_bound,
-            max_bound=max_bound,
             eps=eps,
             min_points=min_points,
             max_points=max_points,
