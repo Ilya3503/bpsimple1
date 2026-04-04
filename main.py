@@ -24,7 +24,7 @@ def process_endpoint(
         results_dir: str = Query("results", description="Папка для сохранения результатов"),
 
         voxel_size: float = Query(0.001, description="Размер вокселя для даунсэмплинга"),
-        nb_neighbors: int = Query(20, description="Количество соседей для фильтрации шума"),
+        nb_neighbors: int = Query(10, description="Количество соседей для фильтрации шума"),
         std_ratio: float = Query(2.0, description="Коэффициент стандартного отклонения при фильтрации"),
 
 
