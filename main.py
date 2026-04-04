@@ -27,12 +27,6 @@ def process_endpoint(
         nb_neighbors: int = Query(20, description="Количество соседей для фильтрации шума"),
         std_ratio: float = Query(2.0, description="Коэффициент стандартного отклонения при фильтрации"),
 
-        min_bound_x: float = Query(-231, description="Мин. X для обрезки"),
-        min_bound_y: float = Query(-190, description="Мин. Y для обрезки"),
-        min_bound_z: float = Query(474, description="Мин. Z для обрезки"),
-        max_bound_x: float = Query(264, description="Макс. X для обрезки"),
-        max_bound_y: float = Query(190, description="Макс. Y для обрезки"),
-        max_bound_z: float = Query(670, description="Макс. Z для обрезки"),
 
         eps: float = Query(30.0, description="Параметр eps для DBSCAN"),
         min_points: int = Query(20, description="Минимальное количество точек для кластера"),

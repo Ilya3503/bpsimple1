@@ -40,3 +40,44 @@
 #     distance_threshold = distance_threshold,
 #     ransac_n = ransac_n,
 #     num_iterations = num_iterations,
+#
+#
+# min_bound_x: float = Query(-231, description="Мин. X для обрезки"),
+# min_bound_y: float = Query(-190, description="Мин. Y для обрезки"),
+# min_bound_z: float = Query(474, description="Мин. Z для обрезки"),
+# max_bound_x: float = Query(264, description="Макс. X для обрезки"),
+# max_bound_y: float = Query(190, description="Макс. Y для обрезки"),
+# max_bound_z: float = Query(670, description="Макс. Z для обрезки"),
+#
+# min_bound: tuple = (-231, -190, 474),
+# max_bound: tuple = (264, 190, 670),
+#
+#
+#
+#
+# def crop_points_numpy(pcd: o3d.geometry.PointCloud,
+#                       min_bound: Optional[tuple] = None,
+#                       max_bound: Optional[tuple] = None) -> o3d.geometry.PointCloud:
+#     if min_bound is None or max_bound is None:
+#         return pcd
+#     pcd = clean_point_cloud(pcd)
+#     pts = np.asarray(pcd.points)
+#     if pts.size == 0:
+#         return o3d.geometry.PointCloud()
+#     mask = (
+#         (pts[:, 0] >= min_bound[0]) & (pts[:, 0] <= max_bound[0]) &
+#         (pts[:, 1] >= min_bound[1]) & (pts[:, 1] <= max_bound[1]) &
+#         (pts[:, 2] >= min_bound[2]) & (pts[:, 2] <= max_bound[2])
+#     )
+#     cropped = o3d.geometry.PointCloud()
+#     cropped.points = o3d.utility.Vector3dVector(pts[mask])
+#     return cropped
+#
+#
+#
+#
+#
+#
+#
+#     pcd = crop_points_numpy(pcd, min_bound, max_bound)
+#     print(f"[process] После обрезки по границам {min_bound} - {max_bound}: {len(pcd.points)} точек")

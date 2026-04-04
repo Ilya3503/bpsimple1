@@ -66,23 +66,7 @@ def clean_point_cloud(pcd: o3d.geometry.PointCloud) -> o3d.geometry.PointCloud:
     return clean_pcd
 
 
-def crop_points_numpy(pcd: o3d.geometry.PointCloud,
-                      min_bound: Optional[tuple] = None,
-                      max_bound: Optional[tuple] = None) -> o3d.geometry.PointCloud:
-    if min_bound is None or max_bound is None:
-        return pcd
-    pcd = clean_point_cloud(pcd)
-    pts = np.asarray(pcd.points)
-    if pts.size == 0:
-        return o3d.geometry.PointCloud()
-    mask = (
-        (pts[:, 0] >= min_bound[0]) & (pts[:, 0] <= max_bound[0]) &
-        (pts[:, 1] >= min_bound[1]) & (pts[:, 1] <= max_bound[1]) &
-        (pts[:, 2] >= min_bound[2]) & (pts[:, 2] <= max_bound[2])
-    )
-    cropped = o3d.geometry.PointCloud()
-    cropped.points = o3d.utility.Vector3dVector(pts[mask])
-    return cropped
+
 
 
 # -------------------- Кластеризация --------------------
@@ -189,8 +173,6 @@ def process_pointcloud(
     voxel_size: float = 0.001,
     nb_neighbors: int = 20,
     std_ratio: float = 2.0,
-    min_bound: tuple = (-231, -190, 474),
-    max_bound: tuple = (264, 190, 670),
     eps: float = 30,
     min_points: int = 20,
     max_points: Optional[int] = None,
@@ -220,8 +202,7 @@ def process_pointcloud(
 
 
     # Кроп
-    pcd = crop_points_numpy(pcd, min_bound, max_bound)
-    print(f"[process] После обрезки по границам {min_bound} - {max_bound}: {len(pcd.points)} точек")
+
 
     # Проверка перед кластеризацией
     if len(pcd.points) == 0:
