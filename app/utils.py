@@ -75,9 +75,10 @@
 #
 #
 #
-#
-#
-#
-#
+# #min_bound = (min_bound_x, min_bound_y, min_bound_z)
+#         max_bound = (max_bound_x, max_bound_y, max_bound_z)
+# #
+# #
+# #
 #     pcd = crop_points_numpy(pcd, min_bound, max_bound)
 #     print(f"[process] После обрезки по границам {min_bound} - {max_bound}: {len(pcd.points)} точек")

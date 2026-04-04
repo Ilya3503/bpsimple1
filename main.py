@@ -35,8 +35,6 @@ def process_endpoint(
         cad_file: str = Query(None, description="Путь к CAD-модели для ICP (опционально)"),
 ):
     try:
-        min_bound = (min_bound_x, min_bound_y, min_bound_z)
-        max_bound = (max_bound_x, max_bound_y, max_bound_z)
 
         result = process_pointcloud(
             input_file=input_file,
