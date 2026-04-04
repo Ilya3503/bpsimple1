@@ -55,23 +55,7 @@ def remove_noise(pcd: o3d.geometry.PointCloud, nb_neighbors: int = 20, std_ratio
     return cl
 
 
-def remove_plane(pcd: o3d.geometry.PointCloud,
-                 distance_threshold: float = 0.01,
-                 ransac_n: int = 3,
-                 num_iterations: int = 1000) -> o3d.geometry.PointCloud:
-    pts = np.asarray(pcd.points)
-    if pts.shape[0] < ransac_n:
-        # Недостаточно точек для сегментации плоскости
-        print(f"[remove_plane] Пропуск сегментации плоскости: точек {pts.shape[0]} < ransac_n {ransac_n}")
-        return pcd
-    try:
-        plane_model, inliers = pcd.segment_plane(distance_threshold=distance_threshold,
-                                                 ransac_n=ransac_n,
-                                                 num_iterations=num_iterations)
-        return pcd.select_by_index(inliers, invert=True)
-    except Exception as e:
-        print(f"[remove_plane] Ошибка сегментации плоскости: {e}")
-        return pcd
+
 
 
 def clean_point_cloud(pcd: o3d.geometry.PointCloud) -> o3d.geometry.PointCloud:
@@ -205,9 +189,6 @@ def process_pointcloud(
     voxel_size: float = 0.001,
     nb_neighbors: int = 20,
     std_ratio: float = 2.0,
-    distance_threshold: float = 70.0,
-    ransac_n: int = 3,
-    num_iterations: int = 1000,
     min_bound: tuple = (-231, -190, 474),
     max_bound: tuple = (264, 190, 670),
     eps: float = 30,
@@ -236,9 +217,7 @@ def process_pointcloud(
     pcd = remove_noise(pcd, nb_neighbors, std_ratio)
     print(f"[process] После фильтрации шума (nb_neighbors={nb_neighbors}, std_ratio={std_ratio}): {len(pcd.points)} точек")
 
-    # Удаление плоскости
-    pcd = remove_plane(pcd, distance_threshold, ransac_n, num_iterations)
-    print(f"[process] После удаления плоскости (distance_threshold={distance_threshold}): {len(pcd.points)} точек")
+
 
     # Кроп
     pcd = crop_points_numpy(pcd, min_bound, max_bound)
