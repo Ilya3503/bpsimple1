@@ -22,7 +22,7 @@ def capture_pointcloud(output_dir: str = "data"):
     align = rs.align(rs.stream.color)
 
     # --- фильтры ---
-    decimation = rs.decimation_filter()
+    ###decimation = rs.decimation_filter()
     spatial = rs.spatial_filter()
     temporal = rs.temporal_filter()
     hole_filling = rs.hole_filling_filter()
