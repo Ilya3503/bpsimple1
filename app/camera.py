@@ -13,19 +13,11 @@ def capture_pointcloud(output_dir: str = "data"):
     pipeline = rs.pipeline()
     config = rs.config()
 
-    # максимальное стабильное разрешение для D415
-    config.enable_stream(rs.stream.depth, 1280, 720, rs.format.z16, 15)
-    config.enable_stream(rs.stream.color, 1280, 720, rs.format.bgr8, 15)
+    # оставляем стабильное разрешение
+    config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+    config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
 
     profile = pipeline.start(config)
-
-    # --- выравнивание depth к color ---
-    align = rs.align(rs.stream.color)
-
-    # --- фильтры глубины ---
-    spatial = rs.spatial_filter()
-    temporal = rs.temporal_filter()
-    hole_filling = rs.hole_filling_filter()
 
     # --- параметры камеры ---
     depth_sensor = profile.get_device().first_depth_sensor()
@@ -40,17 +32,8 @@ def capture_pointcloud(output_dir: str = "data"):
 
     # --- получаем кадр ---
     frames = pipeline.wait_for_frames()
-
-    # align depth к color
-    frames = align.process(frames)
-
     depth_frame = frames.get_depth_frame()
     color_frame = frames.get_color_frame()
-
-    # --- применяем фильтры ---
-    depth_frame = spatial.process(depth_frame)
-    depth_frame = temporal.process(depth_frame)
-    depth_frame = hole_filling.process(depth_frame)
 
     depth = np.asanyarray(depth_frame.get_data())
     color = np.asanyarray(color_frame.get_data())
