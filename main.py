@@ -23,10 +23,10 @@ def process_endpoint(
         input_file: str = Query(None, description="Путь к файлу, если use_latest=False"),
         results_dir: str = Query("results", description="Папка для сохранения результатов"),
 
-        voxel_size: float = Query(8.0, description="Размер вокселя для даунсэмплинга"),
+        voxel_size: float = Query(1.0, description="Размер вокселя для даунсэмплинга"),
         nb_neighbors: int = Query(20, description="Количество соседей для фильтрации шума"),
         std_ratio: float = Query(2.0, description="Коэффициент стандартного отклонения при фильтрации"),
-        distance_threshold: float = Query(70.0, description="Порог расстояния при удалении плоскости"),
+        #distance_threshold: float = Query(70.0, description="Порог расстояния при удалении плоскости"),
         ransac_n: int = Query(3, description="Количество точек для RANSAC"),
         num_iterations: int = Query(1000, description="Количество итераций RANSAC"),
         min_bound_x: float = Query(-231, description="Мин. X для обрезки"),

@@ -196,7 +196,7 @@ def process_pointcloud(
     voxel_size: float = 8.0,
     nb_neighbors: int = 20,
     std_ratio: float = 2.0,
-    distance_threshold: float = 70.0,
+    #distance_threshold: float = 70.0,
     ransac_n: int = 3,
     num_iterations: int = 1000,
     min_bound: tuple = (-231, -190, 474),
@@ -218,7 +218,8 @@ def process_pointcloud(
     pcd = load_point_cloud(input_file)
     pcd = voxel_downsample(pcd, voxel_size)
     pcd = remove_noise(pcd, nb_neighbors, std_ratio)
-    pcd = remove_plane(pcd, distance_threshold, ransac_n, num_iterations)
+    #pcd = remove_plane(pcd, distance_threshold, ransac_n, num_iterations)
+    pcd = remove_plane(pcd, ransac_n, num_iterations)
     pcd = crop_points_numpy(pcd, min_bound, max_bound)
 
     clusters = cluster_dbscan(pcd, eps, min_points, max_points)
