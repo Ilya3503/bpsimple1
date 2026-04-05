@@ -32,7 +32,7 @@ def process_endpoint(
         roi_z_max: float = Query(0.75, description="ROI Z макс (м)"),
 
         # --- Предобработка ---
-        voxel_size: float = Query(0.05, description="Размер вокселя (м), рекомендуется 0.005"),
+        voxel_size: float = Query(0.02, description="Размер вокселя (м), рекомендуется 0.005"),
         nb_neighbors: int = Query(20, description="Соседи для статистической фильтрации"),
         std_ratio: float = Query(2.0, description="Коэф. стд. отклонения для фильтрации"),
 
