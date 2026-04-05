@@ -2,6 +2,7 @@ from fastapi import FastAPI, Query, HTTPException
 from app.camera import capture_pointcloud
 from app.processing import process_pointcloud
 from robot.controller import RobotController
+from app.merge import merge_point_cloud_files, get_two_latest_files
 
 app = FastAPI(
     title="Point Cloud Perception API",
@@ -119,3 +120,109 @@ def execute_endpoint(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка выполнения: {e}")
+
+
+
+
+
+
+
+
+
+
+
+@app.post("/merge", tags=["Съёмка"], summary="Объединить два облака точек")
+def merge_endpoint(
+
+    # --- Источник файлов ---
+    use_latest: bool = Query(
+        True,
+        description="Взять два последних файла из папки автоматически"
+    ),
+    folder: str = Query(
+        "data",
+        description="Папка для поиска файлов (если use_latest=True)"
+    ),
+
+    # --- Явное указание файлов ---
+    file_a: str = Query(
+        None,
+        description="Путь к файлу A (позиция камеры 1). "
+                    "Используется если use_latest=False"
+    ),
+    file_b: str = Query(
+        None,
+        description="Путь к файлу B (позиция камеры 2). "
+                    "Используется если use_latest=False"
+    ),
+
+    # --- Параметры ---
+    output_dir: str = Query(
+        "data",
+        description="Папка для сохранения merged файла"
+    ),
+    voxel_size: float = Query(
+        0.005,
+        description="Вокселизация после merge (м). 0 — отключить"
+    ),
+):
+    """
+    Объединяет два облака точек из разных позиций камеры.
+
+    Два режима выбора файлов:
+
+    **Автоматически (use_latest=True):**
+    Берёт два последних .ply файла из папки по timestamp.
+    Удобно если только что сделал два /capture подряд.
+
+    **Вручную (use_latest=False):**
+    Передаёшь явные пути file_a и file_b.
+    Удобно если хочешь объединить конкретные файлы.
+
+    **Трансформация между позициями камеры:**
+    Сейчас используется заглушка (единичная матрица).
+    Объекты могут задвоиться — это ожидаемо.
+    После калибровки напарник заполняет DEFAULT_T_B_TO_A
+    в файле app/merge.py реальными значениями.
+
+    **Результат:**
+    Сохраняет merged_TIMESTAMP.ply в output_dir.
+    Путь к файлу можно сразу передать в /process_pointcloud.
+    """
+    try:
+        # Определяем файлы
+        if use_latest:
+            files = get_two_latest_files(folder)
+            resolved_a = str(files[0])
+            resolved_b = str(files[1])
+        else:
+            if file_a is None or file_b is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="При use_latest=False нужно передать file_a и file_b"
+                )
+            resolved_a = file_a
+            resolved_b = file_b
+
+        merged_path, is_stub = merge_point_cloud_files(
+            file_a=resolved_a,
+            file_b=resolved_b,
+            output_dir=output_dir,
+            T_b_to_a=None,   # None = использует заглушку из merge.py
+            voxel_size=voxel_size,
+        )
+
+        return {
+            "status": "ok",
+            "file_a": resolved_a,
+            "file_b": resolved_b,
+            "merged_file": merged_path,
+            "transform_is_stub": is_stub) if is_stub else "Трансформация применена.",
+        }
+
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка merge: {e}")
