@@ -8,3 +8,5 @@ uvicorn
 pydantic
 matplotlib.pyplot
 matplotlib
+pybullet
+ikpy

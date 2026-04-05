@@ -502,7 +502,7 @@ def process_pointcloud(
     roi_z_max: float = 0.75,
 
     # Предобработка
-    voxel_size: float = 0.02,
+    voxel_size: float = 0.05,
     nb_neighbors: int = 20,
     std_ratio: float = 2.0,
 

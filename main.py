@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Query, HTTPException
 from app.camera import capture_pointcloud
 from app.processing import process_pointcloud
+from robot.controller import RobotController
 
 app = FastAPI(
     title="Point Cloud Perception API",
@@ -81,3 +82,40 @@ def process_endpoint(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка: {e}")
+
+
+
+
+
+
+
+@app.post("/execute", tags=["Робот"], summary="Выполнить захват объекта")
+def execute_endpoint(
+    json_path: str = Query("results/position.json", description="Путь к position.json"),
+    robot_urdf: str = Query(None, description="Путь к URDF робота (опционально)"),
+    use_gui: bool = Query(True, description="Показывать окно PyBullet"),
+    grasp_offset_z: float = Query(0.05, description="Высота захвата над объектом (м)"),
+):
+    """
+    Запускает полный цикл:
+    position.json → grasp pose → IK → PyBullet симуляция
+
+    Пока нет URDF — симулятор запускается со сценой без робота.
+    Куб и стол будут видны в окне PyBullet.
+    """
+    try:
+        controller = RobotController(
+            robot_urdf=robot_urdf,
+            use_gui=use_gui,
+            grasp_offset_z=grasp_offset_z,
+        )
+        result = controller.execute_from_json(json_path)
+        controller.shutdown()
+        return result
+
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка выполнения: {e}")
