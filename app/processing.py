@@ -103,7 +103,7 @@ def crop_roi(
 
 def voxel_downsample(
     pcd: o3d.geometry.PointCloud,
-    voxel_size: float = 0.05,
+    voxel_size: float = 0.02,
 ) -> o3d.geometry.PointCloud:
     """
     Вокселизация. Рекомендуемый размер вокселя: 0.005 (5мм).
@@ -413,7 +413,7 @@ def run_icp(
 def estimate_pose_for_cluster(
     cluster: o3d.geometry.PointCloud,
     cad_model: Optional[o3d.geometry.PointCloud],
-    icp_voxel_size: float = 0.05,
+    icp_voxel_size: float = 0.02,
 ) -> Dict:
     """
     Главная функция оценки позы для одного кластера.
@@ -502,7 +502,7 @@ def process_pointcloud(
     roi_z_max: float = 0.75,
 
     # Предобработка
-    voxel_size: float = 0.05,
+    voxel_size: float = 0.02,
     nb_neighbors: int = 20,
     std_ratio: float = 2.0,
 
