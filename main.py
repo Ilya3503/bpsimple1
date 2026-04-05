@@ -217,7 +217,8 @@ def merge_endpoint(
             "file_a": resolved_a,
             "file_b": resolved_b,
             "merged_file": merged_path,
-            "transform_is_stub": is_stub) if is_stub else "Трансформация применена.",
+            "transform_is_stub": is_stub,
+            if is_stub else "Трансформация применена.",
         }
 
     except FileNotFoundError as e:
