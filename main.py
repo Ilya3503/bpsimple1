@@ -218,7 +218,10 @@ def merge_endpoint(
             "file_b": resolved_b,
             "merged_file": merged_path,
             "transform_is_stub": is_stub,
-            if is_stub else "Трансформация применена.",
+            "note": (
+                "Трансформация — заглушка (единичная матрица). "
+                "Заполни DEFAULT_T_B_TO_A в app/merge.py после калибровки."
+            ) if is_stub else "Трансформация применена.",
         }
 
     except FileNotFoundError as e:
