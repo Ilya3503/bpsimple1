@@ -82,37 +82,22 @@ def load_pcd(path: str) -> o3d.geometry.PointCloud:
 # ОБЪЕДИНЕНИЕ ОБЛАКОВ
 # ==============================================================================
 
-def merge_two_clouds(
-    pcd_a: o3d.geometry.PointCloud,
-    pcd_b: o3d.geometry.PointCloud,
-    T_b_to_a: Optional[np.ndarray] = None,
-    voxel_size: float = 0.005,
-) -> o3d.geometry.PointCloud:
-    """
-    Объединяет два облака точек в одно.
-
-    Параметры:
-        pcd_a      — облако из позиции A (опорное, не трансформируется)
-        pcd_b      — облако из позиции B (трансформируется в систему A)
-        T_b_to_a   — матрица 4x4, трансформация B → A
-                     если None — используется DEFAULT_T_B_TO_A (заглушка)
-        voxel_size — размер вокселя для финального даунсэмплинга merged облака
-
-    Возвращает:
-        merged — объединённое облако в системе координат A
-    """
+def merge_two_clouds(pcd_a, pcd_b, T_b_to_a=None, voxel_size=0.005):
     T = T_b_to_a if T_b_to_a is not None else DEFAULT_T_B_TO_A
 
-    # Трансформируем B в систему координат A
+    print("[merge] Начало transform...")
     pcd_b_transformed = o3d.geometry.PointCloud(pcd_b)
     pcd_b_transformed.transform(T)
+    print("[merge] Transform готов")
 
-    # Объединяем
+    print("[merge] Начало сложения облаков...")
     merged = pcd_a + pcd_b_transformed
+    print(f"[merge] Сложение готово: {len(merged.points)} точек")
 
-    # Даунсэмплинг чтобы убрать дублирующиеся точки на границе
     if voxel_size > 0:
+        print("[merge] Начало voxel DS...")
         merged = merged.voxel_down_sample(voxel_size)
+        print(f"[merge] DS готов: {len(merged.points)} точек")
 
     return merged
 
@@ -151,7 +136,9 @@ def merge_point_cloud_files(
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     out_path = Path(output_dir) / f"merged_{timestamp}.ply"
+    print("[merge] Начало записи файла...")
     o3d.io.write_point_cloud(str(out_path), merged)
+    print("[merge] Файл записан")
     print(f"[merge] Сохранено: {out_path}")
 
     return str(out_path), is_stub
