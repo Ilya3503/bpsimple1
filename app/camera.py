@@ -9,7 +9,6 @@ def capture_pointcloud(output_dir: str = "data"):
 
     Path(output_dir).mkdir(exist_ok=True)
 
-    # --- запуск камеры ---
     pipeline = rs.pipeline()
     config = rs.config()
 

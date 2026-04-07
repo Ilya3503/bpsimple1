@@ -18,7 +18,7 @@ class RobotController:
         controller = RobotController()
         controller.execute_from_json("results/position.json")
 
-    Когда напарник принесёт URDF:
+    Когда появится URDF:
         controller = RobotController(
             robot_urdf="simulation/models/robot/robot.urdf"
         )

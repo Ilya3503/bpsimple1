@@ -15,9 +15,9 @@ class SimulationBridge:
         - визуализацию движения
 
     Как подключить реального робота:
-        1. Напарник предоставляет URDF файл
+        1. Подставить URDF файл
         2. Передать путь: SimulationBridge(robot_urdf="path/to/robot.urdf")
-        3. Сцену напарник описывает в simulation/scene.py
+        3. Сцену описать в simulation/scene.py
 
     Сейчас работает с заглушкой сцены — простой куб вместо робота.
     """
@@ -67,7 +67,7 @@ class SimulationBridge:
         object_position — позиция куба из perception pipeline [x, y, z].
         Если не задана — куб ставится в центр сцены.
 
-        Сцену (стол, освещение, камеру) напарник может расширить
+        Сцену (стол, освещение, камеру) можно будет расширить
         в simulation/scene.py не трогая этот файл.
         """
         p = self.p
@@ -76,7 +76,7 @@ class SimulationBridge:
         self.plane_id = p.loadURDF("plane.urdf")
 
         # --- Стол (заглушка — простой прямоугольник) ---
-        # Напарник заменит на нормальный URDF стола
+        # Заменить на нормальный URDF стола
         table_col = p.createCollisionShape(
             p.GEOM_BOX,
             halfExtents=[0.5, 0.5, 0.02],
@@ -117,7 +117,7 @@ class SimulationBridge:
             self._load_robot()
         else:
             print("[simulation] URDF робота не задан — робот не загружен")
-            print("[simulation] Передайте robot_urdf= когда напарник принесёт файл")
+            print("[simulation] Передайте robot_urdf= когда появится файл")
 
         print(f"[simulation] Сцена загружена. Объект в позиции: {pos}")
 

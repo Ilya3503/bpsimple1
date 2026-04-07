@@ -12,7 +12,6 @@ app = FastAPI(
 
 @app.get("/capture", tags=["Камера"])
 def capture():
-    """Захват облака точек с RealSense камеры."""
     filepath = capture_pointcloud()
     return {"status": "ok", "file": filepath}
 
