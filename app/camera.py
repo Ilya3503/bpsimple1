@@ -95,6 +95,6 @@ def capture_pointcloud(output_dir: str = "data"):
     filepath = Path(output_dir) / filename
 
     # --- сохраняем ---
-    o3d.io.write_point_cloud(str(filepath), pcd, write_ascii=True)
+    o3d.io.write_point_cloud(str(filepath), pcd)
 
     return str(filepath)
