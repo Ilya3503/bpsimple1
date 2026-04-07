@@ -126,8 +126,7 @@ def merge_point_cloud_files(
 ) -> str:
     """
     Загружает два файла, объединяет и сохраняет результат.
-
-    Возвращает путь к сохранённому merged файлу.
+    Даунсэмплинг применяется ДО merge чтобы не вешать память.
     """
     pcd_a = load_pcd(file_a)
     pcd_b = load_pcd(file_b)
@@ -135,16 +134,20 @@ def merge_point_cloud_files(
     print(f"[merge] Файл A: {file_a} — {len(pcd_a.points)} точек")
     print(f"[merge] Файл B: {file_b} — {len(pcd_b.points)} точек")
 
+    # --- Даунсэмплинг ДО merge ---
+    if voxel_size > 0:
+        pcd_a = pcd_a.voxel_down_sample(voxel_size)
+        pcd_b = pcd_b.voxel_down_sample(voxel_size)
+        print(f"[merge] После DS: A={len(pcd_a.points)} B={len(pcd_b.points)} точек")
+
     T = T_b_to_a if T_b_to_a is not None else DEFAULT_T_B_TO_A
     is_stub = T_b_to_a is None or np.allclose(T, np.eye(4))
     if is_stub:
         print("[merge] ВНИМАНИЕ: используется единичная трансформация (заглушка)")
-        print("[merge] Объекты могут задвоиться — это ожидаемо до калибровки")
 
-    merged = merge_two_clouds(pcd_a, pcd_b, T, voxel_size)
-    print(f"[merge] После объединения: {len(merged.points)} точек")
+    merged = merge_two_clouds(pcd_a, pcd_b, T, voxel_size=0)  # DS уже сделан
+    print(f"[merge] После merge: {len(merged.points)} точек")
 
-    # Сохраняем
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     out_path = Path(output_dir) / f"merged_{timestamp}.ply"
