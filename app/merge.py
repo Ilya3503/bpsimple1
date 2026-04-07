@@ -151,7 +151,7 @@ def merge_point_cloud_files(
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     out_path = Path(output_dir) / f"merged_{timestamp}.ply"
-    o3d.io.write_point_cloud(str(out_path), merged, write_ascii=True)
+    o3d.io.write_point_cloud(str(out_path), merged)
     print(f"[merge] Сохранено: {out_path}")
 
     return str(out_path), is_stub
