@@ -51,9 +51,6 @@ pip install -r requirements.txt
 uvicorn main:app --reload --host 0.0.0.0 --port 8000 --workers=1
 ```
 
-Открывай в браузере: **http://localhost:8000/docs**
-
----
 
 ### Основные эндпоинты
 
