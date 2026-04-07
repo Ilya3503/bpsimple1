@@ -82,22 +82,24 @@ def load_pcd(path: str) -> o3d.geometry.PointCloud:
 # ОБЪЕДИНЕНИЕ ОБЛАКОВ
 # ==============================================================================
 
-def merge_two_clouds(pcd_a, pcd_b, T_b_to_a=None, voxel_size=0.005):
+def merge_two_clouds(pcd_a, pcd_b, T_b_to_a=None, voxel_size=0.0):
     T = T_b_to_a if T_b_to_a is not None else DEFAULT_T_B_TO_A
 
     print("[merge] Начало transform...")
-    pcd_b_transformed = o3d.geometry.PointCloud(pcd_b)
-    pcd_b_transformed.transform(T)
+    # Трансформируем через numpy — без копирования Open3D объекта
+    pts_b = np.asarray(pcd_b.points).copy()
+    ones = np.ones((pts_b.shape[0], 1))
+    pts_b_h = np.hstack([pts_b, ones])       # homogeneous coordinates
+    pts_b_transformed = (T @ pts_b_h.T).T[:, :3]
     print("[merge] Transform готов")
 
     print("[merge] Начало сложения облаков...")
-    merged = pcd_a + pcd_b_transformed
-    print(f"[merge] Сложение готово: {len(merged.points)} точек")
+    pts_a = np.asarray(pcd_a.points)
+    pts_merged = np.vstack([pts_a, pts_b_transformed])
 
-    if voxel_size > 0:
-        print("[merge] Начало voxel DS...")
-        merged = merged.voxel_down_sample(voxel_size)
-        print(f"[merge] DS готов: {len(merged.points)} точек")
+    merged = o3d.geometry.PointCloud()
+    merged.points = o3d.utility.Vector3dVector(pts_merged)
+    print(f"[merge] Сложение готово: {len(merged.points)} точек")
 
     return merged
 
