@@ -192,19 +192,43 @@ def cluster_dbscan(
 
 
 def get_cluster_info(cluster: o3d.geometry.PointCloud, cluster_id: int) -> Dict:
-    """Геометрические характеристики кластера через OBB."""
-    obb = cluster.get_oriented_bounding_box()
-    center = list(map(float, obb.center))
-    extent = list(map(float, obb.extent))
-    R = np.asarray(obb.R)
-    yaw = float(np.arctan2(R[1, 0], R[0, 0]))
+    """Геометрические характеристики кластера с защитой от плоских объектов."""
+    pts = np.asarray(cluster.points)
+
+    if len(pts) < 6:
+        aabb = cluster.get_axis_aligned_bounding_box()
+        center = list(map(float, aabb.get_center()))
+        extent = list(map(float, aabb.get_extent()))
+        R = np.eye(3)
+        yaw = 0.0
+        is_obb = False
+    else:
+        try:
+            # Пытаемся сделать OBB
+            obb = cluster.get_oriented_bounding_box()
+            center = list(map(float, obb.center))
+            extent = list(map(float, obb.extent))
+            R = np.asarray(obb.R)
+            yaw = float(np.arctan2(R[1, 0], R[0, 0]))
+            is_obb = True
+        except Exception as e:
+            print(f"[WARNING] OBB failed for cluster {cluster_id}: {e}")
+            # Fallback на AABB
+            aabb = cluster.get_axis_aligned_bounding_box()
+            center = list(map(float, aabb.get_center()))
+            extent = list(map(float, aabb.get_extent()))
+            R = np.eye(3)
+            yaw = 0.0
+            is_obb = False
+
     return {
         "id": cluster_id,
         "center": center,
         "extent": extent,
         "yaw": yaw,
         "rotation_matrix": R.tolist(),
-        "points_count": int(len(cluster.points)),
+        "points_count": int(len(pts)),
+        "is_obb": is_obb
     }
 
 

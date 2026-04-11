@@ -3,6 +3,22 @@ from app.camera import capture_pointcloud
 from app.processing import process_pointcloud
 from robot.controller import RobotController
 from app.merge import merge_point_cloud_files, get_two_latest_files
+from enum import Enum
+from pathlib import Path
+
+
+CAD_MODELS_DIR = Path("cad_models")
+CAD_FILES = [f.name for f in CAD_MODELS_DIR.glob("*.ply")] if CAD_MODELS_DIR.exists() else []
+
+class CadModelEnum(str, Enum):
+    pass
+
+
+if CAD_FILES:
+    CadModelEnum = Enum('CadModelEnum', {f.replace('.', '_').replace(' ', '_'): f for f in CAD_FILES})
+else:
+    CadModelEnum = Enum('CadModelEnum', {'NONE': None})
+
 
 app = FastAPI(
     title="Point Cloud Perception API",
@@ -50,7 +66,7 @@ def process_endpoint(
         max_extent: float = Query(0.30, description="Макс. размер кластера (м), отсекает фон"),
 
         # --- ICP ---
-        cad_file: str = Query(None, description="Путь к CAD-модели .ply (опционально)"),
+        cad_file: CadModelEnum = Query(None, description="CAD модель из папки cad_models"),,
 ):
     try:
         result = process_pointcloud(
