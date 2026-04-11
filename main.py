@@ -7,19 +7,6 @@ from enum import Enum
 from pathlib import Path
 
 
-CAD_MODELS_DIR = Path("cad_models")
-CAD_FILES = [f.name for f in CAD_MODELS_DIR.glob("*.ply")] if CAD_MODELS_DIR.exists() else []
-
-class CadModelEnum(str, Enum):
-    pass
-
-
-if CAD_FILES:
-    CadModelEnum = Enum('CadModelEnum', {f.replace('.', '_').replace(' ', '_'): f for f in CAD_FILES})
-else:
-    CadModelEnum = Enum('CadModelEnum', {'NONE': None})
-
-
 app = FastAPI(
     title="Point Cloud Perception API",
     description="Perception pipeline: depth camera → clustering → pose estimation",
@@ -49,7 +36,7 @@ def process_endpoint(
         roi_z_max: float = Query(0.75, description="ROI Z макс (м)"),
 
         # --- Предобработка ---
-        voxel_size: float = Query(0.02, description="Размер вокселя (м), рекомендуется 0.005"),
+        voxel_size: float = Query(0.005, description="Размер вокселя (м), рекомендуется 0.005"),
         nb_neighbors: int = Query(20, description="Соседи для статистической фильтрации"),
         std_ratio: float = Query(2.0, description="Коэф. стд. отклонения для фильтрации"),
 
@@ -59,14 +46,17 @@ def process_endpoint(
         plane_num_iterations: int = Query(1000, description="Итерации RANSAC"),
 
         # --- DBSCAN ---
-        eps: float = Query(0.03, description="Радиус соседства DBSCAN (м)"),
-        min_points: int = Query(30, description="Мин. точек в кластере"),
+        eps: float = Query(0.025, description="Радиус соседства DBSCAN (м)"),
+        min_points: int = Query(50, description="Мин. точек в кластере"),
         max_points: int = Query(None, description="Макс. точек в кластере (опционально)"),
-        min_extent: float = Query(0.02, description="Мин. размер кластера (м), отсекает мусор"),
-        max_extent: float = Query(0.30, description="Макс. размер кластера (м), отсекает фон"),
+        min_extent: float = Query(0.02, description="Мин. размер кластера (м)"),
+        max_extent: float = Query(0.30, description="Макс. размер кластера (м)"),
 
         # --- ICP ---
-        cad_file: CadModelEnum = Query(None, description="CAD модель из папки cad_models"),,
+        cad_file: str = Query(
+            None,
+            description="Имя CAD-файла из папки cad_models (например: Cube_30х30х30.ply). Оставь пустым для OBB."
+        ),
 ):
     try:
         result = process_pointcloud(
@@ -98,7 +88,6 @@ def process_endpoint(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка: {e}")
-
 
 
 
