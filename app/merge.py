@@ -9,35 +9,16 @@ from datetime import datetime
 # ТРАНСФОРМАЦИЯ МЕЖДУ ПОЗИЦИЯМИ КАМЕРЫ
 # ==============================================================================
 
-# Матрица трансформации из позиции B в позицию A (4x4).
-#
-# Описывает как повёрнута и смещена камера в позиции B
-# относительно камеры в позиции A.
-#
-# Как заполнить:
-#   Напарник измеряет физическое расположение двух креплений камеры.
-#   Либо через калибровочную мишень (шахматная доска),
-#   либо рулеткой + транспортиром приблизительно.
-#
-#   Формат матрицы 4x4:
-#   [ R  | t ]     R — матрица вращения 3x3
-#   [ 0  | 1 ]     t — вектор смещения [x, y, z] в метрах
-#
-# Пример: камера B смещена на 20см вправо и повёрнута на 30° вокруг Y:
-#   import numpy as np
-#   angle = np.radians(30)
-#   T = np.eye(4)
-#   T[0, 3] = 0.20   # смещение X
-#   T[0, 0] =  np.cos(angle)
-#   T[0, 2] =  np.sin(angle)
-#   T[2, 0] = -np.sin(angle)
-#   T[2, 2] =  np.cos(angle)
-#
-# Сейчас стоит единичная матрица (заглушка) —
-# облака просто складываются без трансформации.
-# Это даст задвоение объектов, но цепочка кода работает.
-
-DEFAULT_T_B_TO_A = np.eye(4)  # ЗАГЛУШКА — заменить после калибровки
+try:
+    T_camB_to_camA = np.load("T_camB_to_camA.npy")
+    print(f"[calibration] Загружена матрица T_camB_to_camA из файла")
+except FileNotFoundError:
+    print("[calibration] ВНИМАНИЕ: Файл T_camB_to_camA.npy не найден!")
+    print("[calibration] Используется заглушка (единичная матрица)")
+    T_camB_to_camA = np.eye(4)
+except Exception as e:
+    print(f"[calibration] Ошибка при загрузке калибровки: {e}")
+    T_camB_to_camA = np.eye(4)
 
 
 # ==============================================================================
@@ -83,7 +64,7 @@ def load_pcd(path: str) -> o3d.geometry.PointCloud:
 # ==============================================================================
 
 def merge_two_clouds(pcd_a, pcd_b, T_b_to_a=None, voxel_size=0.0):
-    T = T_b_to_a if T_b_to_a is not None else DEFAULT_T_B_TO_A
+    T = T_b_to_a if T_b_to_a is not None else T_camB_to_camA
 
     print("[merge] Начало transform...")
     # Трансформируем через numpy — без копирования Open3D объекта
@@ -127,8 +108,8 @@ def merge_point_cloud_files(
         pcd_b = pcd_b.voxel_down_sample(voxel_size)
         print(f"[merge] После DS: A={len(pcd_a.points)} B={len(pcd_b.points)} точек")
 
-    T = T_b_to_a if T_b_to_a is not None else DEFAULT_T_B_TO_A
-    is_stub = T_b_to_a is None or np.allclose(T, np.eye(4))
+    T = T_b_to_a if T_b_to_a is not None else T_camB_to_camA
+    is_stub = T_b_to_a is None or np.allclose(T_camB_to_camA, np.eye(4))
     if is_stub:
         print("[merge] ВНИМАНИЕ: используется единичная трансформация (заглушка)")
 
