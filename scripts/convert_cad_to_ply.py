@@ -8,22 +8,23 @@ import traceback
 def mesh_to_pointcloud(input_path: str, output_path: str, num_points: int = 5000):
     print(f"\nОбработка: {input_path}")
 
-    # Читаем меш
     mesh = o3d.io.read_triangle_mesh(input_path)
     print(f"  Вершин: {len(mesh.vertices)}, треугольников: {len(mesh.triangles)}")
 
-    if len(mesh.vertices) == 0:
+    if len(mesh.vertices) == 0 or len(mesh.triangles) == 0:
         print(f"  ПРОПУСК: меш пустой")
-        return False
-
-    if len(mesh.triangles) == 0:
-        print(f"  ПРОПУСК: нет треугольников")
         return False
 
     mesh.compute_vertex_normals()
 
-    pcd = mesh.sample_points_uniformly(number_of_points=num_points)
-    print(f"  Точек сэмплировано: {len(pcd.points)}")
+    # Ограничиваем num_points до разумного максимума
+    # для простых мешей с 12 треугольниками 5000 точек — это segfault
+    max_safe = len(mesh.triangles) * 100
+    actual_points = min(num_points, max_safe)
+    print(f"  Сэмплируем {actual_points} точек (макс безопасное: {max_safe})")
+
+    pcd = mesh.sample_points_uniformly(number_of_points=actual_points)
+    print(f"  Точек получено: {len(pcd.points)}")
 
     center = pcd.get_center()
     pcd.translate(-center)
@@ -43,25 +44,20 @@ if __name__ == "__main__":
     BASE_DIR = Path(__file__).resolve().parent.parent
     cad_dir = BASE_DIR / "cad_models"
 
-    print(f"Папка: {cad_dir}")
-    print(f"Файлы:")
-
-    all_files = list(cad_dir.glob("*.stl")) + list(cad_dir.glob("*.obj"))
-
-    if not all_files:
-        print("  Файлов не найдено")
-    else:
-        for f in all_files:
-            print(f"  {f.name}")
-
-    print("\n--- Конвертация ---")
+    all_files = (
+        list(cad_dir.glob("*.stl")) +
+        list(cad_dir.glob("*.obj"))
+    )
 
     for mesh_file in all_files:
         try:
             out = cad_dir / (mesh_file.stem + ".ply")
+            if out.exists():
+                print(f"  Пропуск (уже есть): {out.name}")
+                continue
             mesh_to_pointcloud(str(mesh_file), str(out))
         except Exception as e:
-            print(f"  ОШИБКА: {e}")
+            print(f"  ОШИБКА {mesh_file.name}: {e}")
             traceback.print_exc()
 
     print("\nГотово.")
