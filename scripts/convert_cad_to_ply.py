@@ -5,7 +5,7 @@ from pathlib import Path
 import traceback
 
 
-def mesh_to_pointcloud(input_path: str, output_path: str, num_points: int = 2000):
+def mesh_to_pointcloud(input_path: str, output_path: str, num_points: int = 5000):
     print(f"\nОбработка: {input_path}")
 
     mesh = o3d.io.read_triangle_mesh(input_path)
