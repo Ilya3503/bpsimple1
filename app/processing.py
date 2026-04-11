@@ -192,33 +192,43 @@ def cluster_dbscan(
 
 
 def get_cluster_info(cluster: o3d.geometry.PointCloud, cluster_id: int) -> Dict:
-    """Безопасная версия получения информации о кластере."""
+    """Максимально безопасная версия. Избегаем QHull crash."""
     pts = np.asarray(cluster.points)
 
-    if len(pts) < 8:
-        print(f"[WARNING] Кластер {cluster_id} слишком маленький ({len(pts)} точек)")
+    if len(pts) < 10:
+        print(f"[WARNING] Кластер {cluster_id} слишком маленький ({len(pts)} точек) → AABB")
+        aabb = cluster.get_axis_aligned_bounding_box()
+        center = list(map(float, aabb.get_center()))
+        extent = list(map(float, aabb.get_extent()))
+        R = np.eye(3)
+        yaw = 0.0
+        return {
+            "id": cluster_id,
+            "center": center,
+            "extent": extent,
+            "yaw": yaw,
+            "rotation_matrix": R.tolist(),
+            "points_count": int(len(pts)),
+        }
+
+    # Проверяем, насколько плоский кластер
+    z_range = pts[:, 2].max() - pts[:, 2].min()
+    if z_range < 0.005:  # 5 мм — очень плоский
+        print(f"[WARNING] Кластер {cluster_id} почти плоский (z_range = {z_range:.4f} м) → используем AABB")
         aabb = cluster.get_axis_aligned_bounding_box()
         center = list(map(float, aabb.get_center()))
         extent = list(map(float, aabb.get_extent()))
         R = np.eye(3)
         yaw = 0.0
     else:
-        # Проверяем плоскостность
-        z_range = pts[:, 2].max() - pts[:, 2].min()
-
         try:
-            if z_range < 0.003:  # Очень плоский объект
-                print(f"[WARNING] Кластер {cluster_id} почти плоский (z_range = {z_range:.4f}м). Используем AABB.")
-                raise Exception("Too flat")
-
             obb = cluster.get_oriented_bounding_box()
             center = list(map(float, obb.center))
             extent = list(map(float, obb.extent))
             R = np.asarray(obb.R)
             yaw = float(np.arctan2(R[1, 0], R[0, 0]))
-
-        except Exception:
-            # Fallback на AABB — всегда работает
+        except Exception as e:
+            print(f"[WARNING] OBB crashed for cluster {cluster_id}: {e} → fallback AABB")
             aabb = cluster.get_axis_aligned_bounding_box()
             center = list(map(float, aabb.get_center()))
             extent = list(map(float, aabb.get_extent()))
@@ -233,7 +243,6 @@ def get_cluster_info(cluster: o3d.geometry.PointCloud, cluster_id: int) -> Dict:
         "rotation_matrix": R.tolist(),
         "points_count": int(len(pts)),
     }
-
 
 # ==============================================================================
 # ICP — ОЦЕНКА ПОЗЫ
