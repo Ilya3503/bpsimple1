@@ -9,17 +9,18 @@ from datetime import datetime
 # ТРАНСФОРМАЦИЯ МЕЖДУ ПОЗИЦИЯМИ КАМЕРЫ
 # ==============================================================================
 
+CALIBRATION_FILE = Path("T_camB_to_camA.npy")
+
 try:
-    T_camB_to_camA = np.load("T_camB_to_camA.npy")
-    print(f"[calibration] Загружена матрица T_camB_to_camA из файла")
+    T_camB_to_camA = np.load(str(CALIBRATION_FILE))
+    print(f"[calibration] ✅ Загружена матрица трансформации: {CALIBRATION_FILE}")
 except FileNotFoundError:
-    print("[calibration] ВНИМАНИЕ: Файл T_camB_to_camA.npy не найден!")
-    print("[calibration] Используется заглушка (единичная матрица)")
+    print(f"[calibration] ⚠️ Файл {CALIBRATION_FILE} не найден!")
+    print("   → Используется заглушка (единичная матрица)")
     T_camB_to_camA = np.eye(4)
 except Exception as e:
-    print(f"[calibration] Ошибка при загрузке калибровки: {e}")
+    print(f"[calibration] Ошибка загрузки: {e}")
     T_camB_to_camA = np.eye(4)
-
 
 # ==============================================================================
 # ЗАГРУЗКА ФАЙЛОВ
