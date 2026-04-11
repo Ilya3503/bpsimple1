@@ -77,22 +77,19 @@ def crop_roi(
 ) -> o3d.geometry.PointCloud:
     """
     Обрезка по заданным границам (все координаты в метрах).
-
-    Для текущей сцены рекомендуемые значения:
-        x: -0.5  .. +0.5
+    Рекомендуемые значения для текущей сцены:
+        x: -0.5 .. +0.5
         y: -0.25 .. +0.25
-        z:  0.50 ..  0.75
+        z:  0.50 .. 0.75
     """
     pts = np.asarray(pcd.points)
     if pts.size == 0:
         return pcd
-
     mask = (
         (pts[:, 0] >= x_min) & (pts[:, 0] <= x_max) &
         (pts[:, 1] >= y_min) & (pts[:, 1] <= y_max) &
         (pts[:, 2] >= z_min) & (pts[:, 2] <= z_max)
     )
-
     cropped = o3d.geometry.PointCloud()
     cropped.points = o3d.utility.Vector3dVector(pts[mask])
     if pcd.has_colors():
@@ -103,11 +100,12 @@ def crop_roi(
 
 def voxel_downsample(
     pcd: o3d.geometry.PointCloud,
-    voxel_size: float = 0.02,
+    voxel_size: float = 0.01,
 ) -> o3d.geometry.PointCloud:
     """
-    Вокселизация. Рекомендуемый размер вокселя: 0.005 (5мм).
-    Баланс: достаточно точек для ICP, достаточно быстро для Jetson.
+    Вокселизация для pipeline.
+    Рекомендуемый размер: 0.01 (1см).
+    ВАЖНО: этот параметр НЕ связан с icp_voxel_size.
     """
     return pcd.voxel_down_sample(voxel_size=voxel_size)
 
@@ -135,12 +133,8 @@ def remove_plane(
 ) -> Tuple[o3d.geometry.PointCloud, Optional[List[float]]]:
     """
     Удаление доминирующей плоскости (стол) через RANSAC.
-
-    Возвращает:
-        pcd_no_plane  — облако без плоскости
-        plane_model   — [a, b, c, d] уравнение плоскости (или None)
-
-    Рекомендуемый distance_threshold: 0.01 (1см).
+    Возвращает облако без плоскости и уравнение [a,b,c,d].
+    distance_threshold=0.01 (1см) — допуск для плоского стола.
     """
     pts = np.asarray(pcd.points)
     if pts.shape[0] < ransac_n:
@@ -172,64 +166,38 @@ def cluster_dbscan(
     max_extent: float = 0.30,
 ) -> List[o3d.geometry.PointCloud]:
     """
-    DBSCAN кластеризация с фильтрацией по размеру кластера.
-
-    Параметры для кубов на столе (все в метрах):
-        eps=0.03        — 3см, расстояние между точками одного объекта
-        min_points=30   — минимум точек в кластере
-        min_extent=0.02 — отсекаем мусор меньше 2см
-        max_extent=0.30 — отсекаем стены/фон больше 30см
-
-    max_points — жёсткий лимит точек (опционально).
+    DBSCAN кластеризация с фильтрацией по физическому размеру.
+    eps=0.03 (3см), min_extent/max_extent отсекают мусор и фон.
     """
     pts = np.asarray(pcd.points)
     if pts.size == 0:
         return []
-
     labels = np.array(
         pcd.cluster_dbscan(eps=eps, min_points=min_points, print_progress=False)
     )
-
     clusters = []
     for lab in np.unique(labels):
         if lab == -1:
             continue
-
         idx = np.where(labels == lab)[0]
-
         if max_points is not None and idx.size > max_points:
             continue
-
         cluster = pcd.select_by_index(idx.tolist())
-
-        # Фильтр по физическому размеру кластера
         extent = cluster.get_axis_aligned_bounding_box().get_extent()
         max_dim = float(np.max(extent))
         if max_dim < min_extent or max_dim > max_extent:
             continue
-
         clusters.append(cluster)
-
     return clusters
 
 
 def get_cluster_info(cluster: o3d.geometry.PointCloud, cluster_id: int) -> Dict:
-    """
-    Вычисляет геометрические характеристики кластера.
-
-    Возвращает словарь совместимый с форматом pose estimation:
-        center      — центр OBB [x, y, z] в метрах
-        extent      — размеры [dx, dy, dz] в метрах
-        yaw         — угол поворота вокруг Y (вертикальная ось камеры)
-        rotation_matrix — полная матрица вращения OBB (3x3)
-        points_count
-    """
+    """Геометрические характеристики кластера через OBB."""
     obb = cluster.get_oriented_bounding_box()
     center = list(map(float, obb.center))
     extent = list(map(float, obb.extent))
     R = np.asarray(obb.R)
     yaw = float(np.arctan2(R[1, 0], R[0, 0]))
-
     return {
         "id": cluster_id,
         "center": center,
@@ -245,13 +213,9 @@ def get_cluster_info(cluster: o3d.geometry.PointCloud, cluster_id: int) -> Dict:
 # ==============================================================================
 
 def rotation_matrix_to_quaternion(R: np.ndarray) -> List[float]:
-    """
-    Конвертация матрицы вращения 3x3 в кватернион [qx, qy, qz, qw].
-    Используется формула Shepperd.
-    """
+    """Матрица вращения 3x3 → кватернион [qx, qy, qz, qw]. Формула Shepperd."""
     R = np.asarray(R, dtype=np.float64)
     trace = R[0, 0] + R[1, 1] + R[2, 2]
-
     if trace > 0:
         s = 0.5 / np.sqrt(trace + 1.0)
         w = 0.25 / s
@@ -276,28 +240,22 @@ def rotation_matrix_to_quaternion(R: np.ndarray) -> List[float]:
         x = (R[0, 2] + R[2, 0]) / s
         y = (R[1, 2] + R[2, 1]) / s
         z = 0.25 * s
-
     return [float(x), float(y), float(z), float(w)]
 
 
 def transformation_to_pose(T: np.ndarray) -> Dict:
-    """
-    Извлекает position и orientation (quaternion) из матрицы 4x4.
-    """
+    """Матрица 4x4 → {position, orientation quaternion}."""
     position = T[:3, 3].tolist()
     R = T[:3, :3]
     orientation = rotation_matrix_to_quaternion(R)
     return {
         "position": [float(v) for v in position],
-        "orientation": orientation,  # [qx, qy, qz, qw]
+        "orientation": orientation,
     }
 
 
 def load_cad_model(file_path: str) -> Optional[o3d.geometry.PointCloud]:
-    """
-    Загружает CAD-модель как облако точек.
-    Поддерживает .ply и .npy.
-    """
+    """Загружает CAD PLY файл. Возвращает None если путь не задан."""
     if file_path is None:
         return None
     path = Path(file_path)
@@ -308,29 +266,20 @@ def load_cad_model(file_path: str) -> Optional[o3d.geometry.PointCloud]:
 
 def estimate_pose_from_obb(cluster: o3d.geometry.PointCloud) -> Dict:
     """
-    Заглушка ICP: оценивает позу объекта по OBB кластера.
-
-    Используется когда CAD-модель недоступна.
-    Возвращает тот же формат что и полноценный ICP,
-    чтобы robot_controller мог работать без изменений.
-
-    Поле 'method' = 'obb_fallback' сигнализирует что это приближение.
+    Fallback: оценка позы по OBB без ICP.
+    method='obb_fallback' сигнализирует об этом downstream.
     """
     obb = cluster.get_oriented_bounding_box()
     R = np.asarray(obb.R)
-
-    # Строим матрицу трансформации 4x4
     T = np.eye(4)
     T[:3, :3] = R
     T[:3, 3] = obb.center
-
     pose = transformation_to_pose(T)
-
     return {
-        "method": "obb_fallback",       # заменится на "icp" когда появятся CAD
-        "fitness": None,                # ICP fitness score (None для заглушки)
-        "inlier_rmse": None,            # ICP RMSE (None для заглушки)
-        "transformation": T.tolist(),   # 4x4 матрица
+        "method": "obb_fallback",
+        "fitness": None,
+        "inlier_rmse": None,
+        "transformation": T.tolist(),
         "position": pose["position"],
         "orientation": pose["orientation"],
         "extent": list(map(float, obb.extent)),
@@ -340,20 +289,24 @@ def estimate_pose_from_obb(cluster: o3d.geometry.PointCloud) -> Dict:
 def run_icp(
     cluster: o3d.geometry.PointCloud,
     cad_model: o3d.geometry.PointCloud,
-    voxel_size: float = 0.005,
+    voxel_size: float = 0.003,
     max_correspondence_distance: float = 0.02,
 ) -> Dict:
     """
     ICP выравнивание кластера с CAD-моделью.
 
+    voxel_size здесь — ТОЛЬКО для внутреннего ICP даунсэмплинга.
+    0.003 (3мм) — мелкий воксель, много точек, точный ICP.
+    Этот параметр НЕ связан с pipeline voxel_size.
+
     Стратегия:
-        1. Копируем CAD через numpy (без зависания)
-        2. Масштабируем CAD под размер кластера
-        3. Начальное приближение: совмещение центров масс
-        4. Point-to-point ICP (надёжнее чем point-to-plane
-           когда точек мало)
+        1. Копируем CAD через numpy
+        2. Центрируем и масштабируем под кластер
+        3. Начальное приближение: совмещение центров
+        4. Point-to-point ICP
+        5. fitness < 0.3 → fallback на OBB
     """
-    # --- 1. Копируем CAD через numpy ---
+    # --- 1. Копируем CAD через numpy (без зависания Open3D) ---
     pts_cad = np.asarray(cad_model.points).copy()
     cad = o3d.geometry.PointCloud()
     cad.points = o3d.utility.Vector3dVector(pts_cad)
@@ -374,20 +327,23 @@ def run_icp(
     pts_cad *= scale
     cad.points = o3d.utility.Vector3dVector(pts_cad)
 
-    # --- 4. Начальное приближение: совмещение центров ---
+    # --- 4. Начальное приближение ---
     cluster_center = cluster.get_center()
     init_T = np.eye(4)
     init_T[:3, 3] = cluster_center
 
-    # --- 5. Даунсэмплинг обоих облаков для скорости ---
+    # --- 5. Даунсэмплинг для ICP ---
     cluster_ds = cluster.voxel_down_sample(voxel_size)
     cad_ds = cad.voxel_down_sample(voxel_size)
 
+    print(f"[ICP] Кластер DS: {len(cluster_ds.points)} точек")
+    print(f"[ICP] CAD DS:     {len(cad_ds.points)} точек")
+
     if len(cluster_ds.points) < 10 or len(cad_ds.points) < 10:
-        print("[ICP] Слишком мало точек после DS, fallback на OBB")
+        print("[ICP] Слишком мало точек — fallback на OBB")
         return estimate_pose_from_obb(cluster)
 
-    # --- 6. Point-to-point ICP ---
+    # --- 6. ICP ---
     result = o3d.pipelines.registration.registration_icp(
         source=cad_ds,
         target=cluster_ds,
@@ -404,13 +360,12 @@ def run_icp(
     T = np.asarray(result.transformation)
     pose = transformation_to_pose(T)
 
-    print(f"[ICP] fitness={result.fitness:.3f} rmse={result.inlier_rmse:.4f}")
+    print(f"[ICP] fitness={result.fitness:.3f}  rmse={result.inlier_rmse:.5f}")
 
-    # Если ICP не сошёлся — fallback на OBB
     if result.fitness < 0.3:
-        print(f"[ICP] Низкий fitness ({result.fitness:.3f}), fallback на OBB")
+        print(f"[ICP] Низкий fitness — fallback на OBB")
         result_obb = estimate_pose_from_obb(cluster)
-        result_obb["icp_fitness"] = result.fitness
+        result_obb["icp_fitness"] = float(result.fitness)
         return result_obb
 
     return {
@@ -427,18 +382,18 @@ def run_icp(
 def estimate_pose_for_cluster(
     cluster: o3d.geometry.PointCloud,
     cad_model: Optional[o3d.geometry.PointCloud],
-    icp_voxel_size: float = 0.02,
+    icp_voxel_size: float = 0.003,
 ) -> Dict:
     """
-    Главная функция оценки позы для одного кластера.
-    Автоматически выбирает ICP или OBB-заглушку.
+    Оценка позы для одного кластера.
+    icp_voxel_size=0.003 — фиксированный, НЕ зависит от pipeline voxel_size.
     """
     if cad_model is None:
         return estimate_pose_from_obb(cluster)
     try:
         return run_icp(cluster, cad_model, voxel_size=icp_voxel_size)
     except Exception as e:
-        print(f"[ICP] Ошибка, fallback на OBB: {e}")
+        print(f"[ICP] Ошибка — fallback на OBB: {e}")
         result = estimate_pose_from_obb(cluster)
         result["icp_error"] = str(e)
         return result
@@ -471,16 +426,13 @@ def create_annotated_pointcloud(
     if not clusters:
         o3d.io.write_point_cloud(str(out_path), pcd)
         return str(out_path)
-
     cmap = plt.get_cmap("tab10")(np.linspace(0, 1, 10))[:, :3]
     all_points, all_colors = [], []
-
     for i, cluster in enumerate(clusters):
         pts = np.asarray(cluster.points)
         clr = np.tile(cmap[i % len(cmap)], (pts.shape[0], 1))
         all_points.append(pts)
         all_colors.append(clr)
-
     merged = o3d.geometry.PointCloud()
     merged.points = o3d.utility.Vector3dVector(np.vstack(all_points))
     merged.colors = o3d.utility.Vector3dVector(np.vstack(all_colors))
@@ -502,38 +454,29 @@ def save_position_json(result: dict, results_dir: str) -> str:
 def process_pointcloud(
     input_file: Optional[str],
     results_dir: str,
-
-    # Источник данных
     use_latest: bool = True,
     folder: str = "data",
-
-    # ROI (метры)
     roi_x_min: float = -0.5,
     roi_x_max: float = 0.5,
     roi_y_min: float = -0.25,
     roi_y_max: float = 0.25,
     roi_z_min: float = 0.50,
     roi_z_max: float = 0.75,
-
-    # Предобработка
-    voxel_size: float = 0.05,
+    # Pipeline voxel — НЕ ICP voxel
+    voxel_size: float = 0.01,
     nb_neighbors: int = 20,
     std_ratio: float = 2.0,
-
-    # RANSAC удаление плоскости
     remove_table: bool = True,
     plane_distance_threshold: float = 0.01,
     plane_ransac_n: int = 3,
     plane_num_iterations: int = 1000,
-
-    # DBSCAN
     eps: float = 0.03,
     min_points: int = 30,
     max_points: Optional[int] = None,
     min_extent: float = 0.02,
     max_extent: float = 0.30,
-
-    # ICP / pose estimation
+    # ICP voxel — отдельный параметр, мелкий
+    icp_voxel_size: float = 0.003,
     cad_file: Optional[str] = None,
 ) -> dict:
 
@@ -541,7 +484,6 @@ def process_pointcloud(
     ensure_dirs(results_path)
     clusters_dir = results_path / "clusters"
 
-    # --- Загрузка ---
     if use_latest:
         input_file = str(get_latest_file(folder))
     elif input_file is None:
@@ -553,13 +495,10 @@ def process_pointcloud(
     pcd = load_point_cloud(input_file)
     print(f"[1] Загружено:          {len(pcd.points):>8} точек")
 
-    # --- Очистка NaN/Inf ---
     pcd = clean_point_cloud(pcd)
     print(f"[2] После очистки:      {len(pcd.points):>8} точек")
 
-    # --- ROI crop ---
-    pcd = crop_roi(
-        pcd,
+    pcd = crop_roi(pcd,
         x_min=roi_x_min, x_max=roi_x_max,
         y_min=roi_y_min, y_max=roi_y_max,
         z_min=roi_z_min, z_max=roi_z_max,
@@ -570,11 +509,9 @@ def process_pointcloud(
         print("[pipeline] После ROI — 0 точек. Проверь границы ROI.")
         return _empty_result(input_file, results_dir)
 
-    # --- Voxel downsample ---
     pcd = voxel_downsample(pcd, voxel_size)
     print(f"[4] После voxel DS:     {len(pcd.points):>8} точек  (voxel={voxel_size})")
 
-    # --- Noise removal ---
     pcd = remove_noise(pcd, nb_neighbors, std_ratio)
     print(f"[5] После noise filter: {len(pcd.points):>8} точек")
 
@@ -582,11 +519,9 @@ def process_pointcloud(
         print("[pipeline] После фильтрации — 0 точек.")
         return _empty_result(input_file, results_dir)
 
-    # --- RANSAC plane removal ---
     plane_model = None
     if remove_table:
-        pcd, plane_model = remove_plane(
-            pcd,
+        pcd, plane_model = remove_plane(pcd,
             distance_threshold=plane_distance_threshold,
             ransac_n=plane_ransac_n,
             num_iterations=plane_num_iterations,
@@ -596,41 +531,36 @@ def process_pointcloud(
             print(f"    Плоскость: a={plane_model[0]:.3f} b={plane_model[1]:.3f} "
                   f"c={plane_model[2]:.3f} d={plane_model[3]:.3f}")
 
-    # --- DBSCAN ---
     if len(pcd.points) == 0:
         clusters = []
     else:
-        clusters = cluster_dbscan(
-            pcd,
-            eps=eps,
-            min_points=min_points,
+        clusters = cluster_dbscan(pcd,
+            eps=eps, min_points=min_points,
             max_points=max_points,
-            min_extent=min_extent,
-            max_extent=max_extent,
+            min_extent=min_extent, max_extent=max_extent,
         )
-    print(f"[7] Кластеры:           {len(clusters)} шт  "
-          f"(eps={eps}, min_pts={min_points})")
+    print(f"[7] Кластеры:           {len(clusters)} шт  (eps={eps}, min_pts={min_points})")
 
-    # --- Pose estimation для каждого кластера ---
     cad_model = load_cad_model(cad_file)
     if cad_model:
-        print(f"[8] CAD модель загружена: {cad_file}")
+        print(f"[8] CAD: {cad_file} — {len(cad_model.points)} точек")
+        print(f"    pipeline voxel={voxel_size}  icp voxel={icp_voxel_size}")
     else:
-        print(f"[8] CAD модель не задана — используется OBB fallback")
+        print(f"[8] CAD не задан — OBB fallback")
 
     clusters_info = []
     for i, cluster in enumerate(clusters):
         info = get_cluster_info(cluster, i)
-        pose = estimate_pose_for_cluster(cluster, cad_model, voxel_size)
+        pose = estimate_pose_for_cluster(cluster, cad_model, icp_voxel_size)
         info["pose"] = pose
         clusters_info.append(info)
+        fitness_str = f"fitness={pose['fitness']:.3f}" if pose.get("fitness") else "fitness=N/A"
         print(f"    Кластер {i}: {info['points_count']} точек | "
-              f"метод={pose['method']} | "
+              f"метод={pose['method']} | {fitness_str} | "
               f"pos=[{pose['position'][0]:.3f}, "
               f"{pose['position'][1]:.3f}, "
               f"{pose['position'][2]:.3f}]")
 
-    # --- Сохранение ---
     save_cluster_files(clusters, str(clusters_dir))
     annotated_path = create_annotated_pointcloud(pcd, clusters, str(results_path))
 
@@ -646,6 +576,7 @@ def process_pointcloud(
                 "z": [roi_z_min, roi_z_max],
             },
             "voxel_size": voxel_size,
+            "icp_voxel_size": icp_voxel_size,
             "plane_removed": remove_table,
             "plane_model": plane_model,
         },
@@ -661,7 +592,6 @@ def process_pointcloud(
 
 
 def _empty_result(input_file: str, results_dir: str) -> dict:
-    """Возвращает пустой результат при отсутствии точек."""
     return {
         "status": "empty",
         "timestamp": datetime.now().isoformat(),

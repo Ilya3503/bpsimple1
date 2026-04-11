@@ -1,57 +1,73 @@
-# scripts/test_icp.py
-
 import open3d as o3d
 import numpy as np
 import sys
 from pathlib import Path
 
-# --- Базовая директория проекта (корень) ---
 BASE_DIR = Path(__file__).resolve().parent.parent
-
-# Добавляем корень проекта в PYTHONPATH
 sys.path.insert(0, str(BASE_DIR))
 
-# Теперь импорт будет стабильным
 from app.processing import run_icp, estimate_pose_from_obb
 
 
 def main():
-    # --- Пути к данным ---
     cluster_path = BASE_DIR / "results" / "clusters" / "cluster_000.ply"
-    cad_path = BASE_DIR / "cad_models" / "Cube_30x30x30.ply"
 
-    # --- Проверка существования файлов ---
+    # Ищем первый PLY в cad_models автоматически — без ручного указания имени
+    cad_dir = BASE_DIR / "cad_models"
+    cad_files = sorted(cad_dir.glob("*.ply"))
+    if not cad_files:
+        raise FileNotFoundError(f"Нет PLY файлов в {cad_dir}")
+
+    cad_path = cad_files[0]
+    print(f"CAD модель: {cad_path.name}")
+
     if not cluster_path.exists():
-        raise FileNotFoundError(f"Не найден файл кластера: {cluster_path}")
+        raise FileNotFoundError(f"Нет кластера: {cluster_path}")
 
-    if not cad_path.exists():
-        raise FileNotFoundError(f"Не найден CAD файл: {cad_path}")
-
-    # --- Загружаем кластер ---
+    # --- Загружаем данные ---
     cluster = o3d.io.read_point_cloud(str(cluster_path))
-    print(f"Кластер: {len(cluster.points)} точек")
-    print(f"Extent: {cluster.get_axis_aligned_bounding_box().get_extent()}")
-
-    # --- Загружаем CAD ---
     cad = o3d.io.read_point_cloud(str(cad_path))
-    print(f"CAD: {len(cad.points)} точек")
 
-    # --- Запускаем ICP ---
-    print("\n--- ICP ---")
-    result = run_icp(cluster, cad, voxel_size=0.005)
+    print(f"Кластер:  {len(cluster.points)} точек | "
+          f"extent={cluster.get_axis_aligned_bounding_box().get_extent()}")
+    print(f"CAD:      {len(cad.points)} точек | "
+          f"extent={cad.get_axis_aligned_bounding_box().get_extent()}")
 
-    print(f"Метод: {result['method']}")
-    print(f"Позиция: {result['position']}")
-    print(f"Ориентация: {result['orientation']}")
+    if len(cluster.points) < 10:
+        raise ValueError(f"Слишком мало точек в кластере: {len(cluster.points)}")
 
+    # --- ICP ---
+    print("\n" + "="*40)
+    print("ICP alignment")
+    print("="*40)
+
+    result = run_icp(cluster, cad, voxel_size=0.003)
+
+    print(f"\nРезультат ICP:")
+    print(f"  Метод:      {result['method']}")
+    print(f"  Позиция:    {[round(v, 4) for v in result['position']]}")
+    print(f"  Ориентация: {[round(v, 4) for v in result['orientation']]}")
     if result.get("fitness") is not None:
-        print(f"Fitness: {result['fitness']:.3f}")
-        print(f"RMSE: {result['inlier_rmse']:.4f}")
+        print(f"  Fitness:    {result['fitness']:.3f}  "
+              f"(>0.5 хорошо, >0.8 отлично)")
+        print(f"  RMSE:       {result['inlier_rmse']:.5f}  "
+              f"(чем меньше тем точнее)")
 
-    # --- Сравнение с OBB ---
-    print("\n--- OBB fallback для сравнения ---")
+    # --- OBB для сравнения ---
+    print("\n" + "="*40)
+    print("OBB fallback (сравнение)")
+    print("="*40)
     obb = estimate_pose_from_obb(cluster)
-    print(f"Позиция OBB: {obb['position']}")
+    print(f"  Позиция: {[round(v, 4) for v in obb['position']]}")
+
+    icp_pos = np.array(result['position'])
+    obb_pos = np.array(obb['position'])
+    diff = np.linalg.norm(icp_pos - obb_pos)
+    print(f"\nРасстояние ICP vs OBB: {diff:.4f} м")
+    if diff < 0.005:
+        print("  → Позиции почти совпадают")
+    else:
+        print("  → ICP уточнил позицию относительно OBB")
 
 
 if __name__ == "__main__":
