@@ -28,29 +28,28 @@ class RobotKinematics:
             self._load_urdf(urdf_path)
 
     def _load_urdf(self, urdf_path: str):
-        """
-        Загружает кинематическую цепочку из URDF через ikpy.
-        Вызывается автоматически если передан urdf_path.
-        """
+        """Загружаем URDF mycobot с правильным base link"""
         path = Path(urdf_path)
         if not path.exists():
             raise FileNotFoundError(f"URDF файл не найден: {urdf_path}")
 
         try:
             from ikpy.chain import Chain
+
+            # Важно! У mycobot первый линк называется g_base, а не base_link
             self.chain = Chain.from_urdf_file(
                 str(path),
-                active_links_mask=self._build_active_mask(),
+                active_links_mask=None,  # пусть ikpy сам определит
+                base_elements=["g_base"],  # ← вот ключевой момент
+                last_link_vector=[0.0, 0.0, 0.0],
             )
-            self.num_joints = len(
-                [l for l in self.chain.links if l.joint_type != "fixed"]
-            )
+
+            self.num_joints = len([link for link in self.chain.links if link.joint_type != "fixed"])
             self.is_stub = False
-            print(f"[kinematics] URDF загружен: {urdf_path}")
+
+            print(f"[kinematics] ✅ URDF mycobot успешно загружен")
             print(f"[kinematics] Джоинтов: {self.num_joints}")
 
-        except ImportError:
-            raise ImportError("ikpy не установлен. Запустите: pip install ikpy")
         except Exception as e:
             raise RuntimeError(f"Ошибка загрузки URDF: {e}")
 
