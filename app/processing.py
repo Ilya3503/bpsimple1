@@ -347,21 +347,23 @@ def run_icp(
     ICP выравнивание кластера с CAD-моделью.
 
     Стратегия:
-        1. Нормализуем масштаб и центрируем CAD-модель
-        2. Начальное приближение: совмещение центров масс
-        3. Point-to-plane ICP для точного выравнивания
-
-    Возвращает тот же формат что estimate_pose_from_obb,
-    но method='icp' и заполнены fitness/inlier_rmse.
-
-    TODO: раскомментировать и протестировать когда появятся CAD-модели.
+        1. Копируем CAD через numpy (без зависания)
+        2. Масштабируем CAD под размер кластера
+        3. Начальное приближение: совмещение центров масс
+        4. Point-to-point ICP (надёжнее чем point-to-plane
+           когда точек мало)
     """
-    # --- 1. Нормализация CAD модели ---
-    cad = o3d.geometry.PointCloud(cad_model)  # копия
-    cad_center = cad.get_center()
-    cad.translate(-cad_center)  # центрируем в (0,0,0)
+    # --- 1. Копируем CAD через numpy ---
+    pts_cad = np.asarray(cad_model.points).copy()
+    cad = o3d.geometry.PointCloud()
+    cad.points = o3d.utility.Vector3dVector(pts_cad)
 
-    # Масштабируем CAD под размер кластера
+    # --- 2. Центрируем CAD ---
+    cad_center = np.mean(pts_cad, axis=0)
+    pts_cad -= cad_center
+    cad.points = o3d.utility.Vector3dVector(pts_cad)
+
+    # --- 3. Масштабируем CAD под размер кластера ---
     cluster_extent = np.asarray(
         cluster.get_axis_aligned_bounding_box().get_extent()
     )
@@ -369,35 +371,47 @@ def run_icp(
         cad.get_axis_aligned_bounding_box().get_extent()
     )
     scale = np.mean(cluster_extent) / (np.mean(cad_extent) + 1e-9)
-    cad.scale(scale, center=np.zeros(3))
+    pts_cad *= scale
+    cad.points = o3d.utility.Vector3dVector(pts_cad)
 
-    # --- 2. Начальное приближение: совмещение центров масс ---
+    # --- 4. Начальное приближение: совмещение центров ---
     cluster_center = cluster.get_center()
     init_T = np.eye(4)
     init_T[:3, 3] = cluster_center
 
-    # --- 3. Нормали (нужны для point-to-plane ICP) ---
-    cluster.estimate_normals(
-        o3d.geometry.KDTreeSearchParamHybrid(radius=voxel_size * 2, max_nn=30)
-    )
-    cad.estimate_normals(
-        o3d.geometry.KDTreeSearchParamHybrid(radius=voxel_size * 2, max_nn=30)
-    )
+    # --- 5. Даунсэмплинг обоих облаков для скорости ---
+    cluster_ds = cluster.voxel_down_sample(voxel_size)
+    cad_ds = cad.voxel_down_sample(voxel_size)
 
-    # --- 4. ICP ---
+    if len(cluster_ds.points) < 10 or len(cad_ds.points) < 10:
+        print("[ICP] Слишком мало точек после DS, fallback на OBB")
+        return estimate_pose_from_obb(cluster)
+
+    # --- 6. Point-to-point ICP ---
     result = o3d.pipelines.registration.registration_icp(
-        source=cad,
-        target=cluster,
+        source=cad_ds,
+        target=cluster_ds,
         max_correspondence_distance=max_correspondence_distance,
         init=init_T,
-        estimation_method=o3d.pipelines.registration.TransformationEstimationPointToPlane(),
+        estimation_method=o3d.pipelines.registration.TransformationEstimationPointToPoint(),
         criteria=o3d.pipelines.registration.ICPConvergenceCriteria(
-            max_iteration=100
+            relative_fitness=1e-6,
+            relative_rmse=1e-6,
+            max_iteration=50,
         ),
     )
 
     T = np.asarray(result.transformation)
     pose = transformation_to_pose(T)
+
+    print(f"[ICP] fitness={result.fitness:.3f} rmse={result.inlier_rmse:.4f}")
+
+    # Если ICP не сошёлся — fallback на OBB
+    if result.fitness < 0.3:
+        print(f"[ICP] Низкий fitness ({result.fitness:.3f}), fallback на OBB")
+        result_obb = estimate_pose_from_obb(cluster)
+        result_obb["icp_fitness"] = result.fitness
+        return result_obb
 
     return {
         "method": "icp",
