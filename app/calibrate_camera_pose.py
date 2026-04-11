@@ -10,8 +10,8 @@ DICTIONARY = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_250)
 # Подключение RealSense
 pipeline = rs.pipeline()
 config = rs.config()
-config.enable_stream(rs.stream.color, 1280, 720, rs.format.bgr8, 30)
-config.enable_stream(rs.stream.depth, 1280, 720, rs.format.z16, 30)
+config.enable_stream(rs.stream.color, 1280, 720, rs.format.bgr8, 6)
+config.enable_stream(rs.stream.depth, 1280, 720, rs.format.z16, 6)
 
 profile = pipeline.start(config)
 
