@@ -409,12 +409,21 @@ def run_icp(
         result_obb["icp_fitness"] = fitness
         return result_obb
 
-    pose = transformation_to_pose(T_total)
+    cluster_center = np.asarray(cluster.points).mean(axis=0)
+
+    R_final = T_total[:3, :3]
+
+    T_pose = np.eye(4)
+    T_pose[:3, :3] = R_final
+    T_pose[:3, 3] = cluster_center
+
+    pose = transformation_to_pose(T_pose)
+
     return {
         "method": "icp",
         "fitness": fitness,
         "inlier_rmse": rmse,
-        "transformation": T_total.tolist(),
+        "transformation": T_pose.tolist(),
         "position": pose["position"],
         "orientation": pose["orientation"],
         "extent": list(map(float, cluster_extent)),
