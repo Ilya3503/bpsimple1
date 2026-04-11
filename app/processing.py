@@ -288,35 +288,47 @@ def estimate_pose_from_obb(cluster: o3d.geometry.PointCloud) -> Dict:
 
 def _icp_step(src: np.ndarray, tgt: np.ndarray, max_dist: float):
     """
-    Один шаг ICP: находим соответствия и считаем трансформацию.
-    src, tgt — массивы точек Nx3.
-    Возвращает матрицу трансформации 4x4 и среднюю ошибку.
+    Улучшенный расчёт fitness:
+    - Учитываем оба облака (CAD и реальный кластер)
+    - Добавляем bidirectional check
     """
     from scipy.spatial import KDTree
 
-    tree = KDTree(tgt)
-    dists, indices = tree.query(src, k=1)
-
-    # Отбираем только близкие пары
-    mask = dists < max_dist
-    if mask.sum() < 6:
+    if len(src) == 0 or len(tgt) == 0:
         return np.eye(4), float('inf'), 0.0
 
-    src_matched = src[mask]
-    tgt_matched = tgt[indices[mask]]
+    # Прямой поиск: CAD → Cluster
+    tree_tgt = KDTree(tgt)
+    dists_forward, _ = tree_tgt.query(src, k=1)
 
-    # Центрируем
+    # Обратный поиск: Cluster → CAD
+    tree_src = KDTree(src)
+    dists_backward, _ = tree_src.query(tgt, k=1)
+
+    # Inliers в обе стороны
+    inliers_fwd = dists_forward < max_dist
+    inliers_bwd = dists_backward < max_dist
+
+    num_inliers = min(inliers_fwd.sum(), inliers_bwd.sum())
+
+    fitness = float(num_inliers) / max(len(src), len(tgt))   # ← изменили
+    rmse = float(np.sqrt((dists_forward[inliers_fwd] ** 2).mean())) if inliers_fwd.any() else float('inf')
+
+    # SVD для трансформации (остаётся как было)
+    src_matched = src[inliers_fwd]
+    tgt_matched = tgt[tree_tgt.query(src, k=1)[1][inliers_fwd]]
+
+    if len(src_matched) < 6:
+        return np.eye(4), float('inf'), 0.0
+
     src_center = src_matched.mean(axis=0)
     tgt_center = tgt_matched.mean(axis=0)
     src_c = src_matched - src_center
     tgt_c = tgt_matched - tgt_center
 
-    # SVD для оптимальной ротации
     H = src_c.T @ tgt_c
     U, S, Vt = np.linalg.svd(H)
     R = Vt.T @ U.T
-
-    # Корректируем отражение
     if np.linalg.det(R) < 0:
         Vt[-1, :] *= -1
         R = Vt.T @ U.T
@@ -325,10 +337,8 @@ def _icp_step(src: np.ndarray, tgt: np.ndarray, max_dist: float):
 
     T = np.eye(4)
     T[:3, :3] = R
+    T[:3, :3] = R
     T[:3, 3] = t
-
-    fitness = float(mask.sum()) / len(src)
-    rmse = float(np.sqrt((dists[mask] ** 2).mean()))
 
     return T, rmse, fitness
 
