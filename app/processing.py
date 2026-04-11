@@ -272,14 +272,30 @@ def transformation_to_pose(T: np.ndarray) -> Dict:
     }
 
 
-def load_cad_model(file_path: str) -> Optional[o3d.geometry.PointCloud]:
-    """Загружает CAD PLY файл. Возвращает None если путь не задан."""
-    if file_path is None:
+def load_cad_model(cad_file: Optional[str]) -> Optional[o3d.geometry.PointCloud]:
+    """Загружает CAD-модель из папки cad_models."""
+    if cad_file is None or cad_file.strip() == "":
         return None
-    path = Path(file_path)
-    if not path.exists():
-        raise FileNotFoundError(f"CAD файл не найден: {file_path}")
-    return load_point_cloud(str(path))
+
+    # Если пользователь передал только имя файла — добавляем папку
+    path = Path(cad_file)
+    if not path.is_absolute():
+        full_path = Path("cad_models") / path.name
+    else:
+        full_path = path
+
+    if not full_path.exists():
+        # Пробуем без расширения (на случай, если забыли .ply)
+        for ext in [".ply", ".obj", ".stl"]:
+            alt_path = Path("cad_models") / (path.stem + ext)
+            if alt_path.exists():
+                full_path = alt_path
+                break
+        else:
+            raise FileNotFoundError(f"CAD файл не найден: {full_path} (проверьте папку cad_models)")
+
+    print(f"[CAD] Загружена модель: {full_path}")
+    return load_point_cloud(str(full_path))
 
 
 def estimate_pose_from_obb(cluster: o3d.geometry.PointCloud) -> Dict:
