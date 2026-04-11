@@ -183,6 +183,12 @@ def cluster_dbscan(
         if max_points is not None and idx.size > max_points:
             continue
         cluster = pcd.select_by_index(idx.tolist())
+
+        # Отбрасываем совсем плоские кластеры
+        z_range = np.asarray(cluster.points)[:, 2].max() - np.asarray(cluster.points)[:, 2].min()
+        if z_range < 0.003:  # меньше 3 мм
+            continue
+
         extent = cluster.get_axis_aligned_bounding_box().get_extent()
         max_dim = float(np.max(extent))
         if max_dim < min_extent or max_dim > max_extent:
@@ -192,48 +198,21 @@ def cluster_dbscan(
 
 
 def get_cluster_info(cluster: o3d.geometry.PointCloud, cluster_id: int) -> Dict:
-    """Максимально безопасная версия. Избегаем QHull crash."""
-    pts = np.asarray(cluster.points)
-
-    if len(pts) < 10:
-        print(f"[WARNING] Кластер {cluster_id} слишком маленький ({len(pts)} точек) → AABB")
+    """Простая и надёжная версия — только AABB, без QHull крашей."""
+    try:
+        # Пытаемся OBB, но с защитой
+        obb = cluster.get_oriented_bounding_box()
+        center = list(map(float, obb.center))
+        extent = list(map(float, obb.extent))
+        R = np.asarray(obb.R)
+        yaw = float(np.arctan2(R[1, 0], R[0, 0]))
+    except Exception as e:
+        print(f"[WARNING] OBB failed for cluster {cluster_id} → using AABB")
         aabb = cluster.get_axis_aligned_bounding_box()
         center = list(map(float, aabb.get_center()))
         extent = list(map(float, aabb.get_extent()))
         R = np.eye(3)
         yaw = 0.0
-        return {
-            "id": cluster_id,
-            "center": center,
-            "extent": extent,
-            "yaw": yaw,
-            "rotation_matrix": R.tolist(),
-            "points_count": int(len(pts)),
-        }
-
-    # Проверяем, насколько плоский кластер
-    z_range = pts[:, 2].max() - pts[:, 2].min()
-    if z_range < 0.005:  # 5 мм — очень плоский
-        print(f"[WARNING] Кластер {cluster_id} почти плоский (z_range = {z_range:.4f} м) → используем AABB")
-        aabb = cluster.get_axis_aligned_bounding_box()
-        center = list(map(float, aabb.get_center()))
-        extent = list(map(float, aabb.get_extent()))
-        R = np.eye(3)
-        yaw = 0.0
-    else:
-        try:
-            obb = cluster.get_oriented_bounding_box()
-            center = list(map(float, obb.center))
-            extent = list(map(float, obb.extent))
-            R = np.asarray(obb.R)
-            yaw = float(np.arctan2(R[1, 0], R[0, 0]))
-        except Exception as e:
-            print(f"[WARNING] OBB crashed for cluster {cluster_id}: {e} → fallback AABB")
-            aabb = cluster.get_axis_aligned_bounding_box()
-            center = list(map(float, aabb.get_center()))
-            extent = list(map(float, aabb.get_extent()))
-            R = np.eye(3)
-            yaw = 0.0
 
     return {
         "id": cluster_id,
@@ -241,7 +220,7 @@ def get_cluster_info(cluster: o3d.geometry.PointCloud, cluster_id: int) -> Dict:
         "extent": extent,
         "yaw": yaw,
         "rotation_matrix": R.tolist(),
-        "points_count": int(len(pts)),
+        "points_count": int(len(cluster.points)),
     }
 
 # ==============================================================================
