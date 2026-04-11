@@ -10,3 +10,4 @@ matplotlib.pyplot
 matplotlib
 pybullet
 ikpy
+scipy

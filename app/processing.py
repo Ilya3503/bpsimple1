@@ -286,6 +286,53 @@ def estimate_pose_from_obb(cluster: o3d.geometry.PointCloud) -> Dict:
     }
 
 
+def _icp_step(src: np.ndarray, tgt: np.ndarray, max_dist: float):
+    """
+    Один шаг ICP: находим соответствия и считаем трансформацию.
+    src, tgt — массивы точек Nx3.
+    Возвращает матрицу трансформации 4x4 и среднюю ошибку.
+    """
+    from scipy.spatial import KDTree
+
+    tree = KDTree(tgt)
+    dists, indices = tree.query(src, k=1)
+
+    # Отбираем только близкие пары
+    mask = dists < max_dist
+    if mask.sum() < 6:
+        return np.eye(4), float('inf'), 0.0
+
+    src_matched = src[mask]
+    tgt_matched = tgt[indices[mask]]
+
+    # Центрируем
+    src_center = src_matched.mean(axis=0)
+    tgt_center = tgt_matched.mean(axis=0)
+    src_c = src_matched - src_center
+    tgt_c = tgt_matched - tgt_center
+
+    # SVD для оптимальной ротации
+    H = src_c.T @ tgt_c
+    U, S, Vt = np.linalg.svd(H)
+    R = Vt.T @ U.T
+
+    # Корректируем отражение
+    if np.linalg.det(R) < 0:
+        Vt[-1, :] *= -1
+        R = Vt.T @ U.T
+
+    t = tgt_center - R @ src_center
+
+    T = np.eye(4)
+    T[:3, :3] = R
+    T[:3, 3] = t
+
+    fitness = float(mask.sum()) / len(src)
+    rmse = float(np.sqrt((dists[mask] ** 2).mean()))
+
+    return T, rmse, fitness
+
+
 def run_icp(
     cluster: o3d.geometry.PointCloud,
     cad_model: o3d.geometry.PointCloud,
@@ -293,86 +340,81 @@ def run_icp(
     max_correspondence_distance: float = 0.02,
 ) -> Dict:
     """
-    ICP выравнивание кластера с CAD-моделью.
-
-    voxel_size здесь — ТОЛЬКО для внутреннего ICP даунсэмплинга.
-    0.003 (3мм) — мелкий воксель, много точек, точный ICP.
-    Этот параметр НЕ связан с pipeline voxel_size.
-
-    Стратегия:
-        1. Копируем CAD через numpy
-        2. Центрируем и масштабируем под кластер
-        3. Начальное приближение: совмещение центров
-        4. Point-to-point ICP
-        5. fitness < 0.3 → fallback на OBB
+    ICP реализован через numpy+scipy — без Open3D registration.
+    Open3D registration_icp крашит на Jetson с версией 0.18.0.
     """
-    # --- 1. Копируем CAD через numpy (без зависания Open3D) ---
+    # --- 1. Копируем CAD через numpy ---
     pts_cad = np.asarray(cad_model.points).copy()
-    cad = o3d.geometry.PointCloud()
-    cad.points = o3d.utility.Vector3dVector(pts_cad)
 
-    # --- 2. Центрируем CAD ---
-    cad_center = np.mean(pts_cad, axis=0)
-    pts_cad -= cad_center
-    cad.points = o3d.utility.Vector3dVector(pts_cad)
+    # --- 2. Центрируем ---
+    pts_cad -= pts_cad.mean(axis=0)
 
-    # --- 3. Масштабируем CAD под размер кластера ---
+    # --- 3. Масштабируем под кластер ---
     cluster_extent = np.asarray(
         cluster.get_axis_aligned_bounding_box().get_extent()
     )
-    cad_extent = np.asarray(
-        cad.get_axis_aligned_bounding_box().get_extent()
-    )
+    cad_extent = pts_cad.max(axis=0) - pts_cad.min(axis=0)
     scale = np.mean(cluster_extent) / (np.mean(cad_extent) + 1e-9)
     pts_cad *= scale
-    cad.points = o3d.utility.Vector3dVector(pts_cad)
 
-    # --- 4. Начальное приближение ---
-    cluster_center = cluster.get_center()
-    init_T = np.eye(4)
-    init_T[:3, 3] = cluster_center
+    # --- 4. Начальное приближение: совмещение центров ---
+    cluster_pts = np.asarray(cluster.points).copy()
+    cluster_center = cluster_pts.mean(axis=0)
+    pts_cad += cluster_center
 
-    # --- 5. Даунсэмплинг для ICP ---
-    cluster_ds = cluster.voxel_down_sample(voxel_size)
-    cad_ds = cad.voxel_down_sample(voxel_size)
+    # --- 5. Даунсэмплинг через numpy ---
+    def downsample(pts, vsize):
+        if vsize <= 0 or len(pts) == 0:
+            return pts
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(pts)
+        pcd_ds = pcd.voxel_down_sample(vsize)
+        return np.asarray(pcd_ds.points)
 
-    print(f"[ICP] Кластер DS: {len(cluster_ds.points)} точек")
-    print(f"[ICP] CAD DS:     {len(cad_ds.points)} точек")
+    src = downsample(pts_cad, voxel_size)
+    tgt = downsample(cluster_pts, voxel_size)
 
-    if len(cluster_ds.points) < 10 or len(cad_ds.points) < 10:
+    print(f"[ICP] src (CAD DS):     {len(src)} точек")
+    print(f"[ICP] tgt (кластер DS): {len(tgt)} точек")
+
+    if len(src) < 6 or len(tgt) < 6:
         print("[ICP] Слишком мало точек — fallback на OBB")
         return estimate_pose_from_obb(cluster)
 
-    # --- 6. ICP ---
-    result = o3d.pipelines.registration.registration_icp(
-        source=cad_ds,
-        target=cluster_ds,
-        max_correspondence_distance=max_correspondence_distance,
-        init=init_T,
-        estimation_method=o3d.pipelines.registration.TransformationEstimationPointToPoint(),
-        criteria=o3d.pipelines.registration.ICPConvergenceCriteria(
-            relative_fitness=1e-6,
-            relative_rmse=1e-6,
-            max_iteration=50,
-        ),
-    )
+    # --- 6. Итерации ICP ---
+    T_total = np.eye(4)
+    prev_rmse = float('inf')
 
-    T = np.asarray(result.transformation)
-    pose = transformation_to_pose(T)
+    for iteration in range(50):
+        T_step, rmse, fitness = _icp_step(src, tgt, max_correspondence_distance)
 
-    print(f"[ICP] fitness={result.fitness:.3f}  rmse={result.inlier_rmse:.5f}")
+        # Применяем трансформацию к src
+        src_h = np.hstack([src, np.ones((len(src), 1))])
+        src = (T_step @ src_h.T).T[:, :3]
 
-    if result.fitness < 0.3:
+        # Накапливаем трансформацию
+        T_total = T_step @ T_total
+
+        # Проверяем сходимость
+        if abs(prev_rmse - rmse) < 1e-6:
+            print(f"[ICP] Сошёлся на итерации {iteration}")
+            break
+        prev_rmse = rmse
+
+    print(f"[ICP] fitness={fitness:.3f}  rmse={rmse:.5f}")
+
+    if fitness < 0.3:
         print(f"[ICP] Низкий fitness — fallback на OBB")
         result_obb = estimate_pose_from_obb(cluster)
-        result_obb["icp_fitness"] = float(result.fitness)
+        result_obb["icp_fitness"] = fitness
         return result_obb
 
+    pose = transformation_to_pose(T_total)
     return {
         "method": "icp",
-        "fitness": float(result.fitness),
-        "inlier_rmse": float(result.inlier_rmse),
-        "transformation": T.tolist(),
+        "fitness": fitness,
+        "inlier_rmse": rmse,
+        "transformation": T_total.tolist(),
         "position": pose["position"],
         "orientation": pose["orientation"],
         "extent": list(map(float, cluster_extent)),
