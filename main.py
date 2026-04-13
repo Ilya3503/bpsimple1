@@ -97,7 +97,7 @@ def process_endpoint(
 @app.post("/execute", tags=["Робот"], summary="Выполнить захват объекта")
 def execute_endpoint(
     json_path: str = Query("results/position.json", description="Путь к position.json"),
-    robot_urdf: str = Query(None, description="Путь к URDF робота (опционально)"),
+    robot_urdf: str = Query("simulation/models/mycobot_280/mycobot_280_m5.urdf", description="Путь к URDF робота"),
     use_gui: bool = Query(True, description="Показывать окно PyBullet"),
     grasp_offset_z: float = Query(0.05, description="Высота захвата над объектом (м)"),
 ):
