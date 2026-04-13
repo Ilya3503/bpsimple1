@@ -48,62 +48,112 @@ class RobotController:
         print(f"\n{'='*50}")
         print(f"[controller] Старт: {json_path}")
 
-        perception = self._load_json(json_path)
+        # ====================== ЗАГЛУШКА ДЛЯ ТЕСТИРОВАНИЯ ======================
 
-        if perception.get("status") != "ok":
-            raise ValueError(f"Статус perception: {perception.get('status')}")
+        object_pos = [0.18, 0.05, 0.25]         # X=18см, Y=5см, Z=25см — удобно для myCobot 280
+        print(f"[controller] ЗАГЛУШКА ВКЛЮЧЕНА → Принудительная позиция кубика: {object_pos}")
+        print(f"[controller] Реальные координаты из position.json игнорируются")
 
-        clusters = perception.get("clusters", [])
-        if not clusters:
-            raise ValueError("Нет кластеров в position.json")
-
-        print(f"[controller] Кластеров: {len(clusters)}")
-
-        # --- Выбираем кластер ---
-        best = select_best_cluster(clusters)
-        pose = best["pose"]
-        print(f"[controller] Кластер {best['id']}: "
-              f"{best['points_count']} точек | "
-              f"метод={pose['method']} | "
-              f"pos={[round(v,3) for v in pose['position']]}")
-
-        # --- Загружаем объект в сцену ---
+        # Загружаем объект в сцену
         self.sim.load_object(
-            position=pose["position"],
-            extent=pose["extent"],
-            orientation=pose["orientation"],
+            position=object_pos,
+            extent=[0.05, 0.05, 0.05],      # размер кубика 5см
+            orientation=[0, 0, 0, 1],
         )
 
-        # --- Grasp pose ---
-        grasp = compute_grasp_pose(best, self.grasp_offset_z)
+        # Вычисляем позы захвата
+        grasp = compute_grasp_pose(None, self.grasp_offset_z, object_pos=object_pos)
         pregrasp = compute_pregrasp_pose(grasp, self.pregrasp_offset_z)
 
-        print(f"[controller] Pre-grasp: {[round(v,3) for v in pregrasp['position']]}")
-        print(f"[controller] Grasp:     {[round(v,3) for v in grasp['position']]}")
+        print(f"[controller] Pre-grasp позиция: {[round(v,3) for v in pregrasp['position']]}")
+        print(f"[controller] Grasp позиция:     {[round(v,3) for v in grasp['position']]}")
 
-        # --- IK ---
+        # Решаем Inverse Kinematics
         ik_pre = self.kinematics.solve_ik(pregrasp["position"], pregrasp["orientation"])
         ik_grasp = self.kinematics.solve_ik(grasp["position"], grasp["orientation"])
 
-        print(f"[controller] IK pre-grasp: stub={ik_pre['is_stub']} reachable={ik_pre['reachable']}")
-        print(f"[controller] IK grasp:     stub={ik_grasp['is_stub']} reachable={ik_grasp['reachable']}")
+        print(f"[controller] IK pre-grasp reachable = {ik_pre.get('reachable', False)}")
+        print(f"[controller] IK grasp reachable     = {ik_grasp.get('reachable', False)}")
 
-        # --- Движение ---
-        self._execute_grasp_sequence(ik_pre["joint_angles"], ik_grasp["joint_angles"])
+        # Выполняем движение
+        self._execute_grasp_sequence(
+            ik_pre.get("joint_angles", [0.0] * 6),
+            ik_grasp.get("joint_angles", [0.0] * 6)
+        )
 
         result = {
             "status": "ok",
-            "cluster_id": best["id"],
-            "object_position": pose["position"],
+            "mode": "stub",
+            "object_position": object_pos,
             "grasp_position": grasp["position"],
             "pregrasp_position": pregrasp["position"],
             "ik_pregrasp": ik_pre,
             "ik_grasp": ik_grasp,
         }
 
-        print(f"[controller] Готово")
-        print(f"{'='*50}\n")
+        print(f"[controller] Симуляция завершена")
+        print(f"{'='*60}\n")
         return result
+
+
+        # ====================== СТАРЫЙ КОД ======================
+
+        # perception = self._load_json(json_path)
+
+        # if perception.get("status") != "ok":
+        #     raise ValueError(f"Статус perception: {perception.get('status')}")
+
+        # clusters = perception.get("clusters", [])
+        # if not clusters:
+        #     raise ValueError("Нет кластеров в position.json")
+
+        # print(f"[controller] Кластеров: {len(clusters)}")
+
+        # # --- Выбираем кластер ---
+        # best = select_best_cluster(clusters)
+        # pose = best["pose"]
+        # print(f"[controller] Кластер {best['id']}: "
+        #       f"{best['points_count']} точек | "
+        #       f"метод={pose['method']} | "
+        #       f"pos={[round(v,3) for v in pose['position']]}")
+
+        # # --- Загружаем объект в сцену ---
+        # self.sim.load_object(
+        #     position=pose["position"],
+        #     extent=pose["extent"],
+        #     orientation=pose["orientation"],
+        # )
+
+        # # --- Grasp pose ---
+        # grasp = compute_grasp_pose(best, self.grasp_offset_z)
+        # pregrasp = compute_pregrasp_pose(grasp, self.pregrasp_offset_z)
+
+        # print(f"[controller] Pre-grasp: {[round(v,3) for v in pregrasp['position']]}")
+        # print(f"[controller] Grasp:     {[round(v,3) for v in grasp['position']]}")
+
+        # # --- IK ---
+        # ik_pre = self.kinematics.solve_ik(pregrasp["position"], pregrasp["orientation"])
+        # ik_grasp = self.kinematics.solve_ik(grasp["position"], grasp["orientation"])
+
+        # print(f"[controller] IK pre-grasp: stub={ik_pre['is_stub']} reachable={ik_pre['reachable']}")
+        # print(f"[controller] IK grasp:     stub={ik_grasp['is_stub']} reachable={ik_grasp['reachable']}")
+
+        # # --- Движение ---
+        # self._execute_grasp_sequence(ik_pre["joint_angles"], ik_grasp["joint_angles"])
+
+        # result = {
+        #     "status": "ok",
+        #     "cluster_id": best["id"],
+        #     "object_position": pose["position"],
+        #     "grasp_position": grasp["position"],
+        #     "pregrasp_position": pregrasp["position"],
+        #     "ik_pregrasp": ik_pre,
+        #     "ik_grasp": ik_grasp,
+        # }
+
+        # print(f"[controller] Готово")
+        # print(f"{'='*50}\n")
+        # return result
 
     def _execute_grasp_sequence(
         self,
