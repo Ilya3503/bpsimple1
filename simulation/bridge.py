@@ -40,7 +40,7 @@ class SimulationBridge:
         """Загрузка mycobot_280"""
         self.robot_id = p.loadURDF(
             urdf_path,
-            basePosition=[-0.35, 0.0, 0.52],   # робот стоит слева от стола
+            basePosition=[-0.15, 0.0, 0.52],  # ← было -0.35, теперь ближе к центру
             baseOrientation=p.getQuaternionFromEuler([0, 0, 0]),
             useFixedBase=True,
             flags=p.URDF_USE_INERTIA_FROM_FILE

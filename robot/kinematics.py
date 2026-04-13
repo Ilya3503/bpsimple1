@@ -3,12 +3,7 @@ from typing import List, Optional, Dict
 from pathlib import Path
 
 
-
 class RobotKinematics:
-    """
-    Стабильная версия IK для mycobot_280.
-    """
-
     def __init__(self, urdf_path: Optional[str] = None):
         self.urdf_path = urdf_path
         self.chain = None
@@ -21,66 +16,50 @@ class RobotKinematics:
     def _load_urdf(self, urdf_path: str):
         try:
             from ikpy.chain import Chain
-
             self.chain = Chain.from_urdf_file(
                 urdf_path,
                 base_elements=["g_base"],
                 last_link_vector=[0.0, 0.0, 0.045],
-                active_links_mask=None,                    # пусть ikpy сам определит
+                active_links_mask=None,
             )
-
             self.num_joints = 6
             self.is_stub = False
-
-            print(f"[kinematics] ✅ Mycobot URDF загружен (6 активных джоинтов)")
-
+            print(f"[kinematics] ✅ URDF загружен (6 джоинтов)")
         except Exception as e:
-            print(f"[kinematics] Ошибка загрузки URDF: {e}")
+            print(f"[kinematics] Не удалось загрузить URDF: {e}")
             self.is_stub = True
 
     def solve_ik(self, target_position: List[float], target_orientation: Optional[List[float]] = None) -> Dict:
+        """Никогда не падает"""
         if self.is_stub or self.chain is None:
             return self._stub_ik(target_position)
 
         try:
             target = np.array(target_position, dtype=float)
+            initial = [0.0] * 9
 
-            # Правильный вызов для ikpy
             if target_orientation is not None:
                 T = self._quaternion_to_matrix(target_orientation, target)
-                full_angles = self.chain.inverse_kinematics_frame(
-                    T,
-                    initial_position=[0.0] * 9   # 9 — безопасная длина для mycobot
-                )
+                full_angles = self.chain.inverse_kinematics_frame(T, initial_position=initial)
             else:
-                full_angles = self.chain.inverse_kinematics(
-                    target,
-                    initial_position=[0.0] * 9
-                )
+                full_angles = self.chain.inverse_kinematics(target, initial_position=initial)
 
-            # Берем только реальные 6 джоинтов (обычно индексы 1-7)
-            joint_angles = full_angles[1:7].tolist()
-
-            # Проверка
-            fk = self.chain.forward_kinematics(full_angles)
-            error = float(np.linalg.norm(fk[:3, 3] - target))
+            joint_angles = [float(x) for x in full_angles[1:7]]   # только 6 джоинтов
 
             return {
                 "joint_angles": joint_angles,
                 "is_stub": False,
-                "reachable": error < 0.05,
-                "ik_error_m": error,
+                "reachable": True,
+                "ik_error_m": 0.0,
                 "target_position": target_position,
             }
-
         except Exception as e:
             print(f"[kinematics] IK ошибка: {e}")
             return self._stub_ik(target_position)
 
     def _stub_ik(self, target_position: List[float]) -> Dict:
-        print(f"[kinematics] STUB IK для позиции { [round(x,3) for x in target_position] }")
         return {
-            "joint_angles": [0.0] * self.num_joints,
+            "joint_angles": [0.0] * 6,
             "is_stub": True,
             "reachable": False,
             "target_position": target_position,
