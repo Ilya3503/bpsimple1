@@ -25,6 +25,15 @@ class SimulationBridge:
 
         p.resetDebugVisualizerCamera(1.8, 50, -40, [0.0, 0.0, 0.6])
 
+    def get_active_joints(self) -> List[int]:
+        """Возвращает только активные (revolute/prismatic) джоинты"""
+        active = []
+        for i in range(self.num_joints):
+            info = p.getJointInfo(self.robot_id, i)
+            if info[2] != p.JOINT_FIXED:   # 4 = fixed
+                active.append(i)
+        return active
+
     def _load_scene(self):
         p.loadURDF("plane.urdf")
 
@@ -69,15 +78,30 @@ class SimulationBridge:
         return obj_id
 
     def move_to_joint_angles(self, joint_angles: List[float], speed: float = 0.6):
+        """Безопасное движение только по активным джоинтам"""
         if self.robot_id is None:
+            print("[bridge] Нет робота — пропускаем движение")
             return
 
-        for i, angle in enumerate(joint_angles):
-            if i >= self.num_joints:
-                break
-            p.setJointMotorControl2(self.robot_id, i, p.POSITION_CONTROL,
-                                    targetPosition=angle, maxVelocity=speed, force=800)
+        active_joints = self.get_active_joints()
 
+        if len(joint_angles) != len(active_joints):
+            print(
+                f"[bridge] WARNING: Получено {len(joint_angles)} углов, а активных джоинтов {len(active_joints)}. Используем первые {len(active_joints)}")
+            joint_angles = joint_angles[:len(active_joints)]
+
+        for idx, joint_idx in enumerate(active_joints):
+            angle = joint_angles[idx]
+            p.setJointMotorControl2(
+                self.robot_id,
+                joint_idx,
+                p.POSITION_CONTROL,
+                targetPosition=angle,
+                maxVelocity=speed,
+                force=800
+            )
+
+        # Плавное выполнение
         for _ in range(120):
             p.stepSimulation()
 

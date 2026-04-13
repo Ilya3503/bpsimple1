@@ -177,12 +177,18 @@ class RobotController:
         sim = self.sim
 
         print("[controller] → Pre-grasp")
-        sim.move_to_joint_angles(pregrasp_angles, speed=0.5)
-        sim.run_seconds(5)
+        try:
+            sim.move_to_joint_angles(pregrasp_angles, speed=0.5)
+        except Exception as e:
+            print(f"[controller] Ошибка при движении Pre-grasp: {e}")
+
+        sim.run_seconds(3)  # уменьшил время для теста
 
         print("[controller] → Grasp")
-        sim.move_to_joint_angles(grasp_angles, speed=0.3)
-        sim.run_seconds(5)
+        try:
+            sim.move_to_joint_angles(grasp_angles, speed=0.3)
+        except Exception as e:
+            print(f"[controller] Ошибка при движении Grasp: {e}")
 
         print("[controller] → Захват (пауза)")
         sim.run_seconds(5)
