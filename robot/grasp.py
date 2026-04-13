@@ -2,8 +2,6 @@ import numpy as np
 from typing import Dict, List
 
 
-import numpy as np
-from typing import Dict, List
 
 
 def select_best_cluster(clusters: List[Dict]) -> Dict:
