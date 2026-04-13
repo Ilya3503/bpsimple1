@@ -6,6 +6,12 @@ from typing import Optional, List
 
 
 class SimulationBridge:
+    def run_seconds(self, seconds: float):
+        """Прогоняет симуляцию заданное количество секунд."""
+        steps = int(seconds * 240)
+        for _ in range(steps):
+            p.stepSimulation()
+            time.sleep(1.0 / 240.0)
     def __init__(self, robot_urdf: Optional[str] = None, use_gui: bool = True):
         self.use_gui = use_gui
         self.robot_urdf = robot_urdf
