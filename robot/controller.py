@@ -50,33 +50,37 @@ class RobotController:
 
         # ====================== ЗАГЛУШКА ДЛЯ ТЕСТИРОВАНИЯ ======================
 
-        object_pos = [0.10, 0.10, 0.55]     
-        print(f"[controller] ЗАГЛУШКА ВКЛЮЧЕНА → Принудительная позиция кубика: {object_pos}")
-        print(f"[controller] Реальные координаты из position.json игнорируются")
+        # ====================== ЗАГЛУШКА ДЛЯ ТЕСТИРОВАНИЯ ======================
+        # Временно используем фиксированную позицию, чтобы отладить движение робота
+
+        object_pos = [0.10, 0.10, 0.55]
+        print(f"[controller] ЗАГЛУШКА ВКЛЮЧЕНА → Принудительная позиция объекта: {object_pos}")
 
         # Загружаем объект в сцену
         self.sim.load_object(
             position=object_pos,
-            extent=[0.05, 0.05, 0.05],      # размер кубика 5см
+            extent=[0.06, 0.06, 0.06],
             orientation=[0, 0, 0, 1],
         )
 
+        # Создаём фейковый кластер
         best = {
             "id": 999,
-            "points_count": 100,
+            "points_count": 500,
             "pose": {
                 "position": object_pos,
                 "orientation": [0, 0, 0, 1],
+                "extent": [0.06, 0.06, 0.06],
                 "method": "stub"
             }
         }
 
         # Вычисляем позы захвата
-        grasp = compute_grasp_pose(best, self.grasp_offset_z, object_pos=object_pos)
+        grasp = compute_grasp_pose(best, self.grasp_offset_z)
         pregrasp = compute_pregrasp_pose(grasp, self.pregrasp_offset_z)
 
-        print(f"[controller] Pre-grasp позиция: {[round(v,3) for v in pregrasp['position']]}")
-        print(f"[controller] Grasp позиция:     {[round(v,3) for v in grasp['position']]}")
+        print(f"[controller] Pre-grasp: {[round(v, 3) for v in pregrasp['position']]}")
+        print(f"[controller] Grasp:     {[round(v, 3) for v in grasp['position']]}")
 
         # Решаем Inverse Kinematics
         ik_pre = self.kinematics.solve_ik(pregrasp["position"], pregrasp["orientation"])

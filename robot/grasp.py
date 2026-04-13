@@ -2,11 +2,15 @@ import numpy as np
 from typing import Dict, List
 
 
+import numpy as np
+from typing import Dict, List
+
+
 def select_best_cluster(clusters: List[Dict]) -> Dict:
     """
     Выбирает лучший кластер:
       1. Сначала по ICP fitness (чем выше — тем лучше)
-      2. Если fitness нет (obb_fallback) — по количеству точек
+      2. Если fitness нет или равен 0 — по количеству точек
     """
     if not clusters:
         raise ValueError("Список кластеров пуст")
@@ -14,38 +18,29 @@ def select_best_cluster(clusters: List[Dict]) -> Dict:
     def score(c: Dict):
         pose = c.get("pose", {})
         fitness = pose.get("fitness")
-        if fitness is not None and isinstance(fitness, (int, float)):
-            return (fitness, c.get("points_count", 0))  # сначала fitness
+        # Если fitness реальный — используем его как главный приоритет
+        if isinstance(fitness, (int, float)) and fitness > 0:
+            return (fitness, c.get("points_count", 0))
         else:
-            return (0.0, c.get("points_count", 0))  # fallback
+            return (0.0, c.get("points_count", 0))
 
     best = max(clusters, key=score)
 
     pose = best.get("pose", {})
     fitness = pose.get("fitness")
+
     print(f"[controller] Выбран кластер {best['id']} | "
-          f"points={best['points_count']} | "
-          f"method={pose.get('method')} | "
-          f"fitness={fitness:.4f if fitness is not None else 'N/A'}")
+          f"points={best.get('points_count', 0)} | "
+          f"method={pose.get('method', 'unknown')} | "
+          f"fitness={fitness:.4f if isinstance(fitness, (int,float)) else 'N/A'}")
 
     return best
 
 
 def compute_grasp_pose(cluster: Dict, grasp_offset_z: float = 0.05) -> Dict:
     """
-    Вычисляет позу захвата (grasp pose) для робота.
-
-    Стратегия: захват сверху (top-down grasp).
-    Gripper подходит вертикально сверху над центром объекта.
-
-    Параметры:
-        cluster        — кластер из position.json
-        grasp_offset_z — высота подхода над объектом (метры)
-                         по умолчанию 5см над поверхностью куба
-
-    Возвращает:
-        grasp_pose — словарь с position и orientation
-                     совместимый с IK решателем и PyBullet
+    Вычисляет позу захвата сверху.
+    Теперь использует реальную ориентацию из ICP/OBB.
     """
     pos = cluster["pose"]["position"]
     extent = cluster["pose"]["extent"]
@@ -53,18 +48,14 @@ def compute_grasp_pose(cluster: Dict, grasp_offset_z: float = 0.05) -> Dict:
     # Высота верхней грани объекта
     object_top_z = pos[2] + extent[2] / 2.0
 
-    # Позиция захвата: над центром объекта
     grasp_position = [
         pos[0],
         pos[1],
         object_top_z + grasp_offset_z,
     ]
 
-    # Ориентация: gripper смотрит вниз (top-down)
-    # quaternion [qx, qy, qz, qw]
-    # Поворот на 180 градусов вокруг X — захват направлен вниз
+    # БЕРЁМ РЕАЛЬНУЮ ОРИЕНТАЦИЮ ИЗ POSE (очень важно!)
     grasp_orientation = cluster["pose"].get("orientation", [1.0, 0.0, 0.0, 0.0])
-
 
     return {
         "position": grasp_position,
@@ -75,18 +66,8 @@ def compute_grasp_pose(cluster: Dict, grasp_offset_z: float = 0.05) -> Dict:
     }
 
 
-def compute_pregrasp_pose(grasp_pose: Dict, pregrasp_offset_z: float = 0.10) -> Dict:
-    """
-    Вычисляет позу подхода (pre-grasp pose).
-
-    Робот сначала идёт в pre-grasp (безопасная высота),
-    затем опускается в grasp.
-
-    Стандартная двухшаговая стратегия:
-        1. Переместиться в pre-grasp
-        2. Опуститься в grasp
-        3. Закрыть gripper
-    """
+def compute_pregrasp_pose(grasp_pose: Dict, pregrasp_offset_z: float = 0.12) -> Dict:
+    """Просто поднимаемся выше"""
     pre_pos = list(grasp_pose["position"])
     pre_pos[2] += pregrasp_offset_z
 
