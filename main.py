@@ -166,7 +166,7 @@ def merge_endpoint(
         description="Папка для сохранения merged файла"
     ),
     voxel_size: float = Query(
-        0.005,
+        0,
         description="Вокселизация после merge (м). 0 — отключить"
     ),
 ):

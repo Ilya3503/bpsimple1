@@ -4,17 +4,30 @@ from typing import Dict, List
 
 def select_best_cluster(clusters: List[Dict]) -> Dict:
     """
-    Выбирает лучший кластер для захвата.
-
-    Стратегия: берём кластер с наибольшим количеством точек —
-    он скорее всего является реальным объектом, а не шумом.
-
-    Когда появится ICP — можно переключить на выбор по fitness score.
+    Выбирает лучший кластер:
+      1. Сначала по ICP fitness (чем выше — тем лучше)
+      2. Если fitness нет (obb_fallback) — по количеству точек
     """
     if not clusters:
         raise ValueError("Список кластеров пуст")
 
-    best = max(clusters, key=lambda c: c["points_count"])
+    def score(c: Dict):
+        pose = c.get("pose", {})
+        fitness = pose.get("fitness")
+        if fitness is not None and isinstance(fitness, (int, float)):
+            return (fitness, c.get("points_count", 0))  # сначала fitness
+        else:
+            return (0.0, c.get("points_count", 0))  # fallback
+
+    best = max(clusters, key=score)
+
+    pose = best.get("pose", {})
+    fitness = pose.get("fitness")
+    print(f"[controller] Выбран кластер {best['id']} | "
+          f"points={best['points_count']} | "
+          f"method={pose.get('method')} | "
+          f"fitness={fitness:.4f if fitness is not None else 'N/A'}")
+
     return best
 
 
@@ -50,7 +63,8 @@ def compute_grasp_pose(cluster: Dict, grasp_offset_z: float = 0.05) -> Dict:
     # Ориентация: gripper смотрит вниз (top-down)
     # quaternion [qx, qy, qz, qw]
     # Поворот на 180 градусов вокруг X — захват направлен вниз
-    grasp_orientation = [1.0, 0.0, 0.0, 0.0]
+    grasp_orientation = cluster["pose"].get("orientation", [1.0, 0.0, 0.0, 0.0])
+
 
     return {
         "position": grasp_position,

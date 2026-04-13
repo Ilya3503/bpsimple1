@@ -444,7 +444,7 @@ def run_icp(
 
     print(f"[ICP] fitness={fitness:.3f}  rmse={rmse:.5f}")
 
-    if fitness < 0.3:
+    if fitness < 0.24:
         print(f"[ICP] Низкий fitness — fallback на OBB")
         result_obb = estimate_pose_from_obb(cluster)
         result_obb["icp_fitness"] = fitness
