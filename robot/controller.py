@@ -50,7 +50,7 @@ class RobotController:
 
         # ====================== ЗАГЛУШКА ДЛЯ ТЕСТИРОВАНИЯ ======================
 
-        object_pos = [0.18, 0.05, 0.25]         # X=18см, Y=5см, Z=25см — удобно для myCobot 280
+        object_pos = [0.10, 0.05, 0.60]     
         print(f"[controller] ЗАГЛУШКА ВКЛЮЧЕНА → Принудительная позиция кубика: {object_pos}")
         print(f"[controller] Реальные координаты из position.json игнорируются")
 
@@ -61,8 +61,18 @@ class RobotController:
             orientation=[0, 0, 0, 1],
         )
 
+        best = {
+            "id": 999,
+            "points_count": 100,
+            "pose": {
+                "position": object_pos,
+                "orientation": [0, 0, 0, 1],
+                "method": "stub"
+            }
+        }
+
         # Вычисляем позы захвата
-        grasp = compute_grasp_pose(None, self.grasp_offset_z, object_pos=object_pos)
+        grasp = compute_grasp_pose(best, self.grasp_offset_z, object_pos=object_pos)
         pregrasp = compute_pregrasp_pose(grasp, self.pregrasp_offset_z)
 
         print(f"[controller] Pre-grasp позиция: {[round(v,3) for v in pregrasp['position']]}")
