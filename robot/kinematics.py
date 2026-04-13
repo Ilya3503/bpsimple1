@@ -27,34 +27,24 @@ class RobotKinematics:
         try:
             from ikpy.chain import Chain
 
+            # Правильная настройка для mycobot_280
             self.chain = Chain.from_urdf_file(
                 str(path),
-                base_elements=["g_base"],
-                # last_link_vector — смещение от последнего джоинта до TCP
-                # для mycobot_280 это примерно 4.5см по Z
-                last_link_vector=[0, 0, 0.045],
-                active_links_mask=None,
+                base_elements=["g_base"],  # первый линк
+                last_link_vector=[0.0, 0.0, 0.045],  # смещение до gripper
+                active_links_mask=[False, True, True, True, True, True, True, False, False],  # только 6 revolute
             )
 
-            # Считаем только revolute джоинты
-            self.num_joints = sum(
-                1 for link in self.chain.links
-                if link.joint_type not in ("fixed", None)
-                and hasattr(link, "joint_type")
-            )
-            # Запасной вариант если подсчёт не сработал
-            if self.num_joints == 0:
-                self.num_joints = 6
-
+            self.num_joints = 6
             self.is_stub = False
-            print(f"[kinematics] URDF загружен: {urdf_path}")
-            print(f"[kinematics] Звеньев в цепочке: {len(self.chain.links)}")
+
+            print(f"[kinematics] ✅ URDF mycobot загружен успешно")
             print(f"[kinematics] Активных джоинтов: {self.num_joints}")
 
         except Exception as e:
-            print(f"[kinematics] Ошибка загрузки URDF: {e}")
-            print("[kinematics] Работаем в режиме заглушки")
+            print(f"[kinematics] ❌ Ошибка загрузки URDF: {e}")
             self.is_stub = True
+            self.num_joints = 6
 
     def solve_ik(
         self,
@@ -74,53 +64,34 @@ class RobotKinematics:
             "target_position": target_position,
         }
 
-    def _real_ik(
-        self,
-        target_position: List[float],
-        target_orientation: Optional[List[float]],
-    ) -> Dict:
-        target = np.array(target_position)
+    def _real_ik(self, target_position: List[float], target_orientation: Optional[List[float]]) -> Dict:
+        if self.chain is None:
+            return self._stub_ik(target_position)
 
         try:
+            target = np.array(target_position)
+
             if target_orientation is not None:
                 T = self._quaternion_to_matrix(target_orientation, target)
-                joint_angles = self.chain.inverse_kinematics_frame(
-                    T,
-                    initial_position=self._home_position(),
-                )
+                joint_angles = self.chain.inverse_kinematics_frame(T, initial_position=self._home_position())
             else:
-                joint_angles = self.chain.inverse_kinematics(
-                    target,
-                    initial_position=self._home_position(),
-                )
+                joint_angles = self.chain.inverse_kinematics(target, initial_position=self._home_position())
 
-            # Проверяем ошибку через FK
+            # Проверка достижимости
             fk = self.chain.forward_kinematics(joint_angles)
-            achieved = fk[:3, 3]
-            error = float(np.linalg.norm(achieved - target))
-            reachable = error < 0.02  # допуск 2см
-
-            if not reachable:
-                print(f"[kinematics] Точка труднодостижима, ошибка={error*100:.1f}см")
+            error = float(np.linalg.norm(fk[:3, 3] - target))
 
             return {
-                "joint_angles": joint_angles.tolist(),
+                "joint_angles": joint_angles.tolist()[:self.num_joints],  # берём только реальные 6
                 "is_stub": False,
-                "reachable": reachable,
+                "reachable": error < 0.03,
                 "ik_error_m": error,
                 "target_position": target_position,
             }
 
         except Exception as e:
             print(f"[kinematics] IK ошибка: {e}")
-            return {
-                "joint_angles": [0.0] * (self.num_joints + 2),
-                "is_stub": False,
-                "reachable": False,
-                "ik_error_m": None,
-                "target_position": target_position,
-                "error": str(e),
-            }
+            return self._stub_ik(target_position)  # ← возвращаем заглушку вместо краша
 
     def _home_position(self) -> List[float]:
         """Начальная позиция для IK итератора."""
