@@ -140,4 +140,8 @@ class RobotController:
             return json.load(f)
 
     def shutdown(self):
-        self.sim.disconnect()
+        """Завершает работу симулятора безопасно."""
+        try:
+            self.sim.disconnect()
+        except Exception as e:
+            print(f"[controller] Warning during shutdown: {e}")

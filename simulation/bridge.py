@@ -82,5 +82,13 @@ class SimulationBridge:
             p.stepSimulation()
 
     def disconnect(self):
-        p.disconnect(self.client)
-        print("[bridge] PyBullet отключён")
+        """Безопасное отключение PyBullet даже если окно уже закрыто."""
+        if hasattr(self, 'client') and self.client is not None:
+            try:
+                p.disconnect(self.client)
+                print("[bridge] PyBullet отключён корректно")
+            except Exception as e:
+                print(f"[bridge] Warning: PyBullet уже закрыт или ошибка при disconnect: {e}")
+            finally:
+                self.client = None
+                self.robot_id = None
