@@ -80,13 +80,14 @@ class RobotController:
         pregrasp = compute_pregrasp_pose(grasp, self.pregrasp_offset_z)
 
         ROBOT_BASE_POSITION = [-0.15, 0.0, 0.52]   # ← точно такое же значение, как в bridge.py при загрузке робота
+        GRIPPER_OFFSET = [0.18, 0.15, -0.22]     # ← начальное значение
 
         def world_to_base(pose_world: list) -> list:
-            """Переводит позицию из мировой системы в систему базы робота"""
+            """Перевод позиции + компенсация реального положения flange"""
             return [
-                pose_world[0] - ROBOT_BASE_POSITION[0],
-                pose_world[1] - ROBOT_BASE_POSITION[1],
-                pose_world[2] - ROBOT_BASE_POSITION[2]
+                pose_world[0] - ROBOT_BASE_POSITION[0] + GRIPPER_OFFSET[0],
+                pose_world[1] - ROBOT_BASE_POSITION[1] + GRIPPER_OFFSET[1],
+                pose_world[2] - ROBOT_BASE_POSITION[2] + GRIPPER_OFFSET[2]
             ]
 
         # Переводим grasp и pregrasp
