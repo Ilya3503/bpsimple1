@@ -62,11 +62,24 @@ class SimulationBridge:
         )
 
         self.num_joints = p.getNumJoints(self.robot_id)
-        self.gripper_link_index = self.num_joints - 1
-
         print(f"[bridge] ✅ Mycobot загружен ({self.num_joints} джоинтов)")
+        
+        self.gripper_link_index = None
+        print("[bridge] === Список линков робота ===")
+        for i in range(self.num_joints):
+            link_name = p.getJointInfo(self.robot_id, i)[12].decode('UTF-8')
+            print(f"[bridge] Link {i:2d}: {link_name}")
+            
+            if "joint6_flange" in link_name or "flange" in link_name.lower():
+                self.gripper_link_index = i
+                print(f"[bridge] ✓ gripper_link_index = {i} (joint6_flange найден)")
+                break
 
-        # Сброс в home
+        if self.gripper_link_index is None:
+            self.gripper_link_index = self.num_joints - 1  # fallback
+            print("[bridge] WARNING: joint6_flange не найден, используем последний линк")
+
+        # Сброс в home положение
         for i in range(self.num_joints):
             p.resetJointState(self.robot_id, i, 0.0)
 
