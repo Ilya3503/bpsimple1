@@ -107,15 +107,20 @@ class SimulationBridge:
                 force=800
             )
 
-        steps = 400                  
+        steps = 600
         for step in range(steps):
             p.stepSimulation()
-            
-            if step % 80 == 0 or step == steps - 1:  
-                current = [round(p.getJointState(self.robot_id, j)[0], 4) 
-                          for j in active_joints]
+            if step % 80 == 0 or step == steps - 1:
+                current = [round(p.getJointState(self.robot_id, j)[0], 4) for j in active_joints]
                 max_error = max([abs(current[i] - joint_angles[i]) for i in range(len(active_joints))])
                 print(f"[bridge]   step {step:3d} | max_error = {max_error:.4f}")
+
+        # === НОВАЯ ПРОВЕРКА: где на самом деле gripper ===
+        if self.gripper_link_index is not None:
+            gripper_pos = p.getLinkState(self.robot_id, self.gripper_link_index)[0]   # мировая позиция
+            gripper_orn = p.getLinkState(self.robot_id, self.gripper_link_index)[1]
+            print(f"[bridge] Реальная позиция gripper (world): {[round(x, 4) for x in gripper_pos]}")
+            print(f"[bridge] Целевая grasp позиция была: [0.1000, 0.1000, 0.6300]")   # для сравнения
 
         print(f"[bridge] Движение завершено\n")
 
