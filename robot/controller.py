@@ -110,8 +110,11 @@ class RobotController:
         print(f"[controller] Grasp:     {[round(v, 3) for v in grasp['position']]}")
 
         # Решаем Inverse Kinematics
-        ik_pre = self.kinematics.solve_ik(pregrasp_base["position"], pregrasp_base["orientation"])
-        ik_grasp = self.kinematics.solve_ik(grasp_base["position"], grasp_base["orientation"])
+        # ik_pre = self.kinematics.solve_ik(pregrasp_base["position"], pregrasp_base["orientation"])
+        # ik_grasp = self.kinematics.solve_ik(grasp_base["position"], grasp_base["orientation"])
+
+        ik_pre = self.kinematics.solve_ik(pregrasp["position"], pregrasp["orientation"])
+        ik_grasp = self.kinematics.solve_ik(grasp["position"], grasp["orientation"])
 
         print(f"[controller] IK pre-grasp reachable = {ik_pre.get('reachable', False)}")
         print(f"[controller] IK grasp reachable     = {ik_grasp.get('reachable', False)}")
