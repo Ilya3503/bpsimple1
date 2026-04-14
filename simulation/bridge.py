@@ -83,7 +83,7 @@ class SimulationBridge:
         print(f"[bridge] Объект создан: pos={[round(x,3) for x in position]}")
         return obj_id
 
-    def move_to_joint_angles(self, joint_angles: List[float], speed: float = 0.6):
+    def move_to_joint_angles(self, joint_angles: List[float], speed: float = 0.6, max_steps: int = 300):
         """Безопасное движение только по активным джоинтам"""
         if self.robot_id is None:
             print("[bridge] Нет робота — пропускаем движение")
@@ -108,8 +108,27 @@ class SimulationBridge:
             )
 
         # Плавное выполнение
-        for _ in range(120):
+        for step in range(max_steps):
             p.stepSimulation()
+
+            if step % 40 == 0 or step == max_steps - 1:   # логируем каждые ~0.167 сек + в конце
+                current_angles = []
+                errors = []
+                for j_idx in active_joints:
+                    state = p.getJointState(self.robot_id, j_idx)
+                    current = state[0]
+                    target = joint_angles[active_joints.index(j_idx)]
+                    current_angles.append(round(current, 4))
+                    errors.append(round(abs(current - target), 4))
+
+                print(f"[bridge]   step {step:3d} | current: {current_angles} | error: {errors}")
+
+                # Проверка окончания движения
+                if all(e < 0.02 for e in errors):   # порог 0.02 радиан (~1.15°)
+                    print(f"[bridge] ✓ Достигнуто целевое положение за {step} шагов")
+                    break
+
+        print(f"[bridge] Движение завершено (max_steps={max_steps})\n")
 
     def disconnect(self):
         """Безопасное отключение PyBullet даже если окно уже закрыто."""
