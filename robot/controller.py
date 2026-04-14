@@ -94,9 +94,9 @@ class RobotController:
         def world_to_base(pose_world: list) -> list:
             """Переводит позицию из мировой системы в систему базы робота"""
             return [
-                pose_world[0] + ROBOT_BASE_POSITION[0],
-                pose_world[1] + ROBOT_BASE_POSITION[1],
-                pose_world[2] + ROBOT_BASE_POSITION[2]
+                pose_world[0] - ROBOT_BASE_POSITION[0],
+                pose_world[1] - ROBOT_BASE_POSITION[1],
+                pose_world[2] - ROBOT_BASE_POSITION[2]
             ]
 
         # Переводим grasp и pregrasp
@@ -109,12 +109,8 @@ class RobotController:
         print(f"[controller] Pre-grasp: {[round(v, 3) for v in pregrasp['position']]}")
         print(f"[controller] Grasp:     {[round(v, 3) for v in grasp['position']]}")
 
-        # Решаем Inverse Kinematics
-        # ik_pre = self.kinematics.solve_ik(pregrasp_base["position"], pregrasp_base["orientation"])
-        # ik_grasp = self.kinematics.solve_ik(grasp_base["position"], grasp_base["orientation"])
-
-        ik_pre = self.kinematics.solve_ik(pregrasp["position"], pregrasp["orientation"])
-        ik_grasp = self.kinematics.solve_ik(grasp["position"], grasp["orientation"])
+        ik_pre = self.kinematics.solve_ik(pregrasp_base["position"], pregrasp_base["orientation"])
+        ik_grasp = self.kinematics.solve_ik(grasp_base["position"], grasp_base["orientation"])
 
         print(f"[controller] IK pre-grasp reachable = {ik_pre.get('reachable', False)}")
         print(f"[controller] IK grasp reachable     = {ik_grasp.get('reachable', False)}")
