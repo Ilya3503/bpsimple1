@@ -195,15 +195,15 @@ class RobotController:
 
         print("[controller] → Pre-grasp")
         try:
-            sim.move_to_joint_angles(pregrasp_angles, speed=0.6, max_steps=800)
+            sim.move_to_joint_angles(pregrasp_angles, speed=0.6)
         except Exception as e:
             print(f"[controller] Ошибка при движении Pre-grasp: {e}")
 
-        sim.run_seconds(3)  # уменьшил время для теста
+        sim.run_seconds(3)  
 
         print("[controller] → Grasp")
         try:
-            sim.move_to_joint_angles(grasp_angles, speed=0.5, max_steps=800)
+            sim.move_to_joint_angles(grasp_angles, speed=0.5)
         except Exception as e:
             print(f"[controller] Ошибка при движении Grasp: {e}")
 
@@ -212,7 +212,7 @@ class RobotController:
 
         print("[controller] → Возврат в home")
         home = [0.0] * max(sim.num_joints, 6)
-        sim.move_to_joint_angles(home, speed=0.4, max_steps=800)
+        sim.move_to_joint_angles(home, speed=0.4)
         sim.run_seconds(5)
 
         # Держим окно открытым для демонстрации

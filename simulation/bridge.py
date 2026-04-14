@@ -83,7 +83,7 @@ class SimulationBridge:
         print(f"[bridge] Объект создан: pos={[round(x,3) for x in position]}")
         return obj_id
 
-    def move_to_joint_angles(self, joint_angles: List[float], speed: float = 0.6, max_steps: int = 300):
+    def move_to_joint_angles(self, joint_angles: List[float], speed: float = 0.6):
         """Безопасное движение только по активным джоинтам"""
         if self.robot_id is None:
             print("[bridge] Нет робота — пропускаем движение")
@@ -107,30 +107,17 @@ class SimulationBridge:
                 force=800
             )
 
-        # Плавное выполнение
-        for step in range(max_steps):
+        steps = 400                  
+        for step in range(steps):
             p.stepSimulation()
+            
+            if step % 80 == 0 or step == steps - 1:  
+                current = [round(p.getJointState(self.robot_id, j)[0], 4) 
+                          for j in active_joints]
+                max_error = max([abs(current[i] - joint_angles[i]) for i in range(len(active_joints))])
+                print(f"[bridge]   step {step:3d} | max_error = {max_error:.4f}")
 
-            if step % 50 == 0 or step == max_steps - 1:   # логируем реже, чтобы не засорять
-                current_angles = []
-                errors = []
-                for j_idx in active_joints:
-                    state = p.getJointState(self.robot_id, j_idx)
-                    current = state[0]
-                    target = joint_angles[active_joints.index(j_idx)]
-                    current_angles.append(round(current, 4))
-                    errors.append(round(abs(current - target), 4))
-
-                print(f"[bridge]   step {step:3d} | current: {current_angles} | max_error={max(errors):.4f}")
-
-                if all(e < 0.025 for e in errors):        # чуть мягче порог
-                    print(f"[bridge] ✓ Достигнуто целевое положение за {step} шагов")
-                    break
-
-        else:
-            print(f"[bridge] ⚠ Не полностью доехал за {max_steps} шагов (примерно {max_steps/240:.1f} сек)")
-
-        print(f"[bridge] Движение завершено (max_steps={max_steps})\n")
+        print(f"[bridge] Движение завершено\n")
 
     def disconnect(self):
         """Безопасное отключение PyBullet даже если окно уже закрыто."""
