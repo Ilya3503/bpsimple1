@@ -94,9 +94,9 @@ class RobotController:
         def world_to_base(pose_world: list) -> list:
             """Переводит позицию из мировой системы в систему базы робота"""
             return [
-                pose_world[0] - ROBOT_BASE_POSITION[0],
-                pose_world[1] - ROBOT_BASE_POSITION[1],
-                pose_world[2] - ROBOT_BASE_POSITION[2]
+                pose_world[0] + ROBOT_BASE_POSITION[0],
+                pose_world[1] + ROBOT_BASE_POSITION[1],
+                pose_world[2] + ROBOT_BASE_POSITION[2]
             ]
 
         # Переводим grasp и pregrasp
