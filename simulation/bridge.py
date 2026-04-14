@@ -111,7 +111,7 @@ class SimulationBridge:
         for step in range(max_steps):
             p.stepSimulation()
 
-            if step % 40 == 0 or step == max_steps - 1:   # логируем каждые ~0.167 сек + в конце
+            if step % 50 == 0 or step == max_steps - 1:   # логируем реже, чтобы не засорять
                 current_angles = []
                 errors = []
                 for j_idx in active_joints:
@@ -121,12 +121,14 @@ class SimulationBridge:
                     current_angles.append(round(current, 4))
                     errors.append(round(abs(current - target), 4))
 
-                print(f"[bridge]   step {step:3d} | current: {current_angles} | error: {errors}")
+                print(f"[bridge]   step {step:3d} | current: {current_angles} | max_error={max(errors):.4f}")
 
-                # Проверка окончания движения
-                if all(e < 0.02 for e in errors):   # порог 0.02 радиан (~1.15°)
+                if all(e < 0.025 for e in errors):        # чуть мягче порог
                     print(f"[bridge] ✓ Достигнуто целевое положение за {step} шагов")
                     break
+
+        else:
+            print(f"[bridge] ⚠ Не полностью доехал за {max_steps} шагов (примерно {max_steps/240:.1f} сек)")
 
         print(f"[bridge] Движение завершено (max_steps={max_steps})\n")
 
