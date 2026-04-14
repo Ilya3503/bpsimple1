@@ -19,7 +19,7 @@ class RobotKinematics:
             self.chain = Chain.from_urdf_file(
                 urdf_path,
                 base_elements=["g_base"],
-                last_link_vector=[0.0, 0.0, 0.045],
+                last_link_vector=[0.0, 0.0, 0.0],
                 active_links_mask=None,
             )
             self.num_joints = 6

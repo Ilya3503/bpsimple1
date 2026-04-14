@@ -1,29 +1,25 @@
 import json
+import time
 from pathlib import Path
 from typing import Dict, List, Optional
 
 from robot.grasp import select_best_cluster, compute_grasp_pose, compute_pregrasp_pose
 from robot.kinematics import RobotKinematics
-from robot.transform import camera_to_world, world_to_robot_base, transform_orientation, print_transform_status
 from simulation.bridge import SimulationBridge
-
-
-# Позиция основания робота в PyBullet.
-# ВАЖНО: должна совпадать с basePosition в SimulationBridge._load_robot()
-ROBOT_BASE_POSITION = [-0.15, 0.0, 0.52]
-ROBOT_BASE_ORIENTATION = [0.0, 0.0, 0.0]  # roll, pitch, yaw в радианах
 
 
 class RobotController:
     """
-    Главный контроллер: perception → coordinate transform → grasp → IK → PyBullet.
+    Главный контроллер: perception → grasp → IK → PyBullet.
 
-    Цепочка координат:
-        position.json (camera frame)
-            → camera_to_world()  [T_cam_to_world из app/T_cam_to_world.npy]
-            → world frame        [PyBullet world — объект спавнится сюда]
-            → world_to_robot_base()  [вычитаем позицию базы робота]
-            → robot base frame   [IK считается в этой системе]
+    Использование без URDF (только сцена):
+        controller = RobotController()
+        controller.execute_from_json("results/position.json")
+
+    С URDF mycobot:
+        controller = RobotController(
+            robot_urdf="simulation/models/mycobot_280/mycobot_280_m5.urdf"
+        )
     """
 
     def __init__(
@@ -36,150 +32,192 @@ class RobotController:
         self.grasp_offset_z = grasp_offset_z
         self.pregrasp_offset_z = pregrasp_offset_z
 
-        print_transform_status()
-
         self.kinematics = RobotKinematics(urdf_path=robot_urdf)
         self.sim = SimulationBridge(robot_urdf=robot_urdf, use_gui=use_gui)
 
     def execute_from_json(self, json_path: str) -> Dict:
         """
-        Полный цикл захвата из position.json.
-
-        Координаты проходят три системы:
-            camera → world → robot base
+        Полный цикл захвата:
+            1. Читаем position.json
+            2. Выбираем лучший кластер
+            3. Загружаем объект в сцену
+            4. Вычисляем grasp pose
+            5. Решаем IK
+            6. Двигаем робота
         """
-        print(f"\n{'='*55}")
+        print(f"\n{'='*50}")
         print(f"[controller] Старт: {json_path}")
 
-        # --- 1. Читаем perception ---
-        perception = self._load_json(json_path)
-        if perception.get("status") != "ok":
-            raise ValueError(f"Статус perception: {perception.get('status')}")
+        # ====================== ЗАГЛУШКА ДЛЯ ТЕСТИРОВАНИЯ ======================
 
-        clusters = perception.get("clusters", [])
-        if not clusters:
-            raise ValueError("Нет кластеров в position.json")
+        # ====================== ЗАГЛУШКА ДЛЯ ТЕСТИРОВАНИЯ ======================
+        # Временно используем фиксированную позицию, чтобы отладить движение робота
 
-        print(f"[controller] Кластеров: {len(clusters)}")
+        object_pos = [0.10, 0.10, 0.55]
+        print(f"[controller] ЗАГЛУШКА ВКЛЮЧЕНА → Принудительная позиция объекта: {object_pos}")
 
-        # --- 2. Выбираем кластер ---
-        best = select_best_cluster(clusters)
-        pose_cam = best["pose"]
-
-        pos_camera = pose_cam["position"]          # координаты в camera frame
-        ori_camera = pose_cam.get("orientation", [0, 0, 0, 1])
-        extent = pose_cam["extent"]
-
-        print(f"[controller] Camera frame:     {[round(v,3) for v in pos_camera]}")
-
-        # --- 3. Camera frame → World frame ---
-        pos_world = camera_to_world(pos_camera).tolist()
-        # Ориентацию трансформируем через матрицу вращения камеры
-        ori_world = transform_orientation(ori_camera, to_base=True)
-
-        print(f"[controller] World frame:      {[round(v,3) for v in pos_world]}")
-
-        # --- 4. Спавним объект в world frame в PyBullet ---
-        # Объект появляется там где он реально находится на столе
+        # Загружаем объект в сцену
         self.sim.load_object(
-            position=pos_world,
-            extent=extent,
-            orientation=ori_world,
+            position=object_pos,
+            extent=[0.06, 0.06, 0.06],
+            orientation=[0, 0, 0, 1],
         )
 
-        # --- 5. World frame → Robot base frame для IK ---
-        pos_base = world_to_robot_base(
-            pos_world,
-            ROBOT_BASE_POSITION,
-            ROBOT_BASE_ORIENTATION,
-        ).tolist()
-
-        print(f"[controller] Robot base frame: {[round(v,3) for v in pos_base]}")
-
-        # --- 6. Grasp pose в robot base frame ---
-        # Передаём кластер с координатами в base frame
-        cluster_base = {
-            "id": best["id"],
-            "points_count": best["points_count"],
+        # Создаём фейковый кластер
+        best = {
+            "id": 999,
+            "points_count": 500,
             "pose": {
-                "position": pos_base,
-                "orientation": [1.0, 0.0, 0.0, 0.0],  # top-down захват всегда
-                "extent": extent,
-                "method": pose_cam.get("method", "unknown"),
-                "fitness": pose_cam.get("fitness"),
+                "position": object_pos,
+                "orientation": [0, 0, 0, 1],
+                "extent": [0.06, 0.06, 0.06],
+                "method": "stub"
             }
         }
 
-        grasp = compute_grasp_pose(cluster_base, self.grasp_offset_z)
+        # Вычисляем позы захвата
+        grasp = compute_grasp_pose(best, self.grasp_offset_z)
         pregrasp = compute_pregrasp_pose(grasp, self.pregrasp_offset_z)
 
-        print(f"[controller] Pre-grasp (base): {[round(v,3) for v in pregrasp['position']]}")
-        print(f"[controller] Grasp (base):     {[round(v,3) for v in grasp['position']]}")
+        ROBOT_BASE_POSITION = [-0.15, 0.0, 0.52]   # ← точно такое же значение, как в bridge.py при загрузке робота
 
-        # --- 7. IK ---
-        ik_pre = self.kinematics.solve_ik(pregrasp["position"], pregrasp["orientation"])
-        ik_grasp = self.kinematics.solve_ik(grasp["position"], grasp["orientation"])
+        def world_to_base(pose_world: list) -> list:
+            """Переводит позицию из мировой системы в систему базы робота"""
+            return [
+                pose_world[0] - ROBOT_BASE_POSITION[0],
+                pose_world[1] - ROBOT_BASE_POSITION[1],
+                pose_world[2] - ROBOT_BASE_POSITION[2]
+            ]
 
-        print(f"[controller] IK pre-grasp: reachable={ik_pre.get('reachable', False)}")
-        print(f"[controller] IK grasp:     reachable={ik_grasp.get('reachable', False)}")
+        # Переводим grasp и pregrasp
+        grasp_base = grasp.copy()
+        grasp_base["position"] = world_to_base(grasp["position"])
 
-        # --- 8. Движение ---
+        pregrasp_base = pregrasp.copy()
+        pregrasp_base["position"] = world_to_base(pregrasp["position"])
+
+        print(f"[controller] Pre-grasp: {[round(v, 3) for v in pregrasp['position']]}")
+        print(f"[controller] Grasp:     {[round(v, 3) for v in grasp['position']]}")
+
+        # Решаем Inverse Kinematics
+        ik_pre = self.kinematics.solve_ik(pregrasp_base["position"], pregrasp_base["orientation"])
+        ik_grasp = self.kinematics.solve_ik(grasp_base["position"], grasp_base["orientation"])
+
+        print(f"[controller] IK pre-grasp reachable = {ik_pre.get('reachable', False)}")
+        print(f"[controller] IK grasp reachable     = {ik_grasp.get('reachable', False)}")
+
+        # Выполняем движение
         self._execute_grasp_sequence(
             ik_pre.get("joint_angles", [0.0] * 6),
-            ik_grasp.get("joint_angles", [0.0] * 6),
+            ik_grasp.get("joint_angles", [0.0] * 6)
         )
 
         result = {
             "status": "ok",
-            "cluster_id": best["id"],
-            "position_camera": pos_camera,
-            "position_world": pos_world,
-            "position_base": pos_base,
+            "mode": "stub",
+            "object_position": object_pos,
             "grasp_position": grasp["position"],
             "pregrasp_position": pregrasp["position"],
             "ik_pregrasp": ik_pre,
             "ik_grasp": ik_grasp,
         }
 
-        print(f"[controller] Готово")
-        print(f"{'='*55}\n")
+        print(f"[controller] Симуляция завершена")
+        print(f"{'='*60}\n")
         return result
+
+
+        # ====================== СТАРЫЙ КОД ======================
+
+        # perception = self._load_json(json_path)
+
+        # if perception.get("status") != "ok":
+        #     raise ValueError(f"Статус perception: {perception.get('status')}")
+
+        # clusters = perception.get("clusters", [])
+        # if not clusters:
+        #     raise ValueError("Нет кластеров в position.json")
+
+        # print(f"[controller] Кластеров: {len(clusters)}")
+
+        # # --- Выбираем кластер ---
+        # best = select_best_cluster(clusters)
+        # pose = best["pose"]
+        # print(f"[controller] Кластер {best['id']}: "
+        #       f"{best['points_count']} точек | "
+        #       f"метод={pose['method']} | "
+        #       f"pos={[round(v,3) for v in pose['position']]}")
+
+        # # --- Загружаем объект в сцену ---
+        # self.sim.load_object(
+        #     position=pose["position"],
+        #     extent=pose["extent"],
+        #     orientation=pose["orientation"],
+        # )
+
+        # # --- Grasp pose ---
+        # grasp = compute_grasp_pose(best, self.grasp_offset_z)
+        # pregrasp = compute_pregrasp_pose(grasp, self.pregrasp_offset_z)
+
+        # print(f"[controller] Pre-grasp: {[round(v,3) for v in pregrasp['position']]}")
+        # print(f"[controller] Grasp:     {[round(v,3) for v in grasp['position']]}")
+
+        # # --- IK ---
+        # ik_pre = self.kinematics.solve_ik(pregrasp["position"], pregrasp["orientation"])
+        # ik_grasp = self.kinematics.solve_ik(grasp["position"], grasp["orientation"])
+
+        # print(f"[controller] IK pre-grasp: stub={ik_pre['is_stub']} reachable={ik_pre['reachable']}")
+        # print(f"[controller] IK grasp:     stub={ik_grasp['is_stub']} reachable={ik_grasp['reachable']}")
+
+        # # --- Движение ---
+        # self._execute_grasp_sequence(ik_pre["joint_angles"], ik_grasp["joint_angles"])
+
+        # result = {
+        #     "status": "ok",
+        #     "cluster_id": best["id"],
+        #     "object_position": pose["position"],
+        #     "grasp_position": grasp["position"],
+        #     "pregrasp_position": pregrasp["position"],
+        #     "ik_pregrasp": ik_pre,
+        #     "ik_grasp": ik_grasp,
+        # }
+
+        # print(f"[controller] Готово")
+        # print(f"{'='*50}\n")
+        # return result
 
     def _execute_grasp_sequence(
         self,
         pregrasp_angles: List[float],
         grasp_angles: List[float],
-        hold_seconds: float = 10.0,
     ):
         sim = self.sim
 
         print("[controller] → Pre-grasp")
         try:
-            sim.move_to_joint_angles(pregrasp_angles, speed=0.5)
+            sim.move_to_joint_angles(pregrasp_angles, speed=0.6)
         except Exception as e:
-            print(f"[controller] Ошибка pre-grasp: {e}")
-        sim.run_seconds(2.0)
+            print(f"[controller] Ошибка при движении Pre-grasp: {e}")
+
+        sim.run_seconds(3)  
 
         print("[controller] → Grasp")
         try:
-            sim.move_to_joint_angles(grasp_angles, speed=0.3)
+            sim.move_to_joint_angles(grasp_angles, speed=0.5)
         except Exception as e:
-            print(f"[controller] Ошибка grasp: {e}")
-        sim.run_seconds(2.0)
+            print(f"[controller] Ошибка при движении Grasp: {e}")
 
-        print("[controller] → Захват")
-        sim.run_seconds(1.0)
+        print("[controller] → Захват (пауза)")
+        sim.run_seconds(5)
 
-        print("[controller] → Home")
+        print("[controller] → Возврат в home")
         home = [0.0] * max(sim.num_joints, 6)
-        try:
-            sim.move_to_joint_angles(home, speed=0.5)
-        except Exception as e:
-            print(f"[controller] Ошибка home: {e}")
-        sim.run_seconds(2.0)
+        sim.move_to_joint_angles(home, speed=0.4)
+        sim.run_seconds(5)
 
-        print(f"[controller] Держим сцену {hold_seconds}с...")
-        sim.run_seconds(hold_seconds)
+        # Держим окно открытым для демонстрации
+        print("[controller] Сцена открыта. Нажми Enter для закрытия...")
+        input()
 
     def _load_json(self, path: str) -> Dict:
         p = Path(path)
@@ -189,7 +227,8 @@ class RobotController:
             return json.load(f)
 
     def shutdown(self):
+        """Завершает работу симулятора безопасно."""
         try:
             self.sim.disconnect()
         except Exception as e:
-            print(f"[controller] shutdown warning: {e}")
+            print(f"[controller] Warning during shutdown: {e}")
