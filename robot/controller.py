@@ -99,6 +99,7 @@ class RobotController:
                 pose_world[2] - ROBOT_BASE_POSITION[2]
             ]
 
+
         # Переводим grasp и pregrasp
         grasp_base = grasp.copy()
         grasp_base["position"] = world_to_base(grasp["position"])
