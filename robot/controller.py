@@ -27,11 +27,11 @@ class RobotController:
     """
 
     def __init__(
-        self,
-        robot_urdf: Optional[str] = "simulation/models/mycobot_280/mycobot_280_m5.urdf",
-        use_gui: bool = True,
-        grasp_offset_z: float = 0.05,
-        pregrasp_offset_z: float = 0.12,
+            self,
+            robot_urdf: Optional[str] = "simulation/models/mycobot_280/mycobot_280_m5.urdf",
+            use_gui: bool = True,
+            grasp_offset_z: float = 0.05,
+            pregrasp_offset_z: float = 0.12,
     ):
         self.grasp_offset_z = grasp_offset_z
         self.pregrasp_offset_z = pregrasp_offset_z
