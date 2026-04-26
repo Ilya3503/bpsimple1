@@ -5,6 +5,7 @@ from robot.controller import RobotController
 from app.merge import merge_point_cloud_files, get_two_latest_files
 from enum import Enum
 from pathlib import Path
+from typing import Optional
 
 
 app = FastAPI(
