@@ -3,6 +3,7 @@ from app.camera import capture_pointcloud
 from app.processing import process_pointcloud
 from robot.controller import RobotController
 from app.merge import merge_point_cloud_files, get_two_latest_files
+from app.viewer import router as viewer_router
 from enum import Enum
 from pathlib import Path
 from typing import Optional
@@ -13,6 +14,7 @@ app = FastAPI(
     description="Perception pipeline: depth camera → clustering → pose estimation",
 )
 
+app.include_router(viewer_router)
 
 @app.get("/capture", tags=["Камера"])
 def capture():
