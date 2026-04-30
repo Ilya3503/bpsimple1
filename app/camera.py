@@ -62,7 +62,7 @@ def capture_pointcloud(output_dir: str = "data"):
     h, w = depth.shape
 
     left   = 150 
-    right  = 100   
+    right  = 200   
     top    = 50
     bottom = 0
 
