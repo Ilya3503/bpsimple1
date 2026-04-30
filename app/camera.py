@@ -61,8 +61,8 @@ def capture_pointcloud(output_dir: str = "data"):
 # ====================== ROI CROP ======================
     h, w = depth.shape
 
-    left, right = 160, 140
-    top, bottom = 100, 90
+    left, right = 50, 50
+    top, bottom = 30, 30
 
     depth[:top, :] = 0
     depth[bottom:, :] = 0
