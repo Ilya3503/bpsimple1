@@ -61,7 +61,7 @@ def capture_pointcloud(output_dir: str = "data"):
 # ====================== ROI CROP (БЕЗОПАСНЫЙ ВАРИАНТ) ======================
     h, w = depth.shape
 
-    left   = 50  
+    left   = 100 
     right  = 0   
     top    = 0
     bottom = 0
