@@ -63,7 +63,7 @@ def capture_pointcloud(output_dir: str = "data"):
 
     left   = 150 
     right  = 0   
-    top    = 0
+    top    = 200
     bottom = 0
 
     if top > 0:
