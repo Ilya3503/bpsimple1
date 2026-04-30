@@ -58,6 +58,23 @@ def capture_pointcloud(output_dir: str = "data"):
 
     pipeline.stop()
 
+# ====================== ROI CROP ======================
+    h, w = depth.shape
+
+    left, right = 160, 140
+    top, bottom = 100, 90
+
+    depth[:top, :] = 0
+    depth[bottom:, :] = 0
+    depth[:, :left] = 0
+    depth[:, w-right:] = 0
+
+    color[:top, :] = 0
+    color[bottom:, :] = 0
+    color[:, :left] = 0
+    color[:, w-right:] = 0
+    # ====================================================
+
     # --- depth → meters ---
     depth = depth * depth_scale
 
