@@ -61,9 +61,9 @@ def capture_pointcloud(output_dir: str = "data"):
 # ====================== ROI CROP (БЕЗОПАСНЫЙ ВАРИАНТ) ======================
     h, w = depth.shape
 
-    left   = 330 
+    left   = 300 
     right  = 50   
-    top    = 50
+    top    = 150
     bottom = 0
 
     if top > 0:
@@ -76,7 +76,7 @@ def capture_pointcloud(output_dir: str = "data"):
         depth[:, :left] = 0
         color[:, :left] = 0
     if right > 0:
-        depth[:, -right:] = 0       # <- важно: -right
+        depth[:, -right:] = 0       
         color[:, -right:] = 0
 
     print(f"DEBUG: После кропа depth shape = {depth.shape}, non-zero pixels = {np.count_nonzero(depth)}")
